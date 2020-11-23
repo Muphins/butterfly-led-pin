@@ -1,0 +1,10 @@
+Debug/
+*.eep
+*.hex
+*.lss
+*.map
+*.srec
+*.d
+*.o
+*.mk
+Makefile
