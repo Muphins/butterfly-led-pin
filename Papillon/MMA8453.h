@@ -26,7 +26,8 @@ namespace accel{
 *								 Prototypes									   *
 *******************************************************************************/
 void init();
-uint8_t test();
+void sleep();
+void wake();
 tI2cStatus move(uint8_t *x, uint8_t *y, uint8_t *z);
 
 }

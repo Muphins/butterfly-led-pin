@@ -9,6 +9,7 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <stdlib.h>
+#include <avr/sleep.h>
 //#include "twi.h"
 #include "MMA8453.h"
 
@@ -25,10 +26,13 @@ const uint8_t sine[128] = {   0,  0,  1,  1,  2,  4,  6,  8, 10, 12, 15, 18, 22,
 34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
 
 uint8_t g_counter=0;
+bool g_eco = false;
 
 int main(void)
 {
-//	OSCCAL = 00;
+	MCUCR |= 1<<PUD;	// disable pull-up
+	ACSR |= (1<<ACD);	// disable analog comparator
+	PRR = 1<<PRTIM1 | 1<<PRTIM0 | 1<<PRUSI | 1<<PRADC;	// disable peripherals
 	uint8_t counter = 0, quadrant=0;
 	sei();
 	SoftI2CInit();
@@ -42,38 +46,64 @@ int main(void)
 	uint8_t accX = 0;
 	uint8_t accY = 0;
 	uint8_t accZ = 0;
-	uint8_t red = 0;
-	uint8_t gre = 0;
-	uint8_t blu = 0;
-	uint8_t delayPwm;
-	uint16_t cycles;
+// 	uint8_t red = 0;
+// 	uint8_t gre = 0;
+// 	uint8_t blu = 0;
     while (1) 
     {
 		accel::move(&accX, &accY, &accZ);
-		counter += accX + accY + accZ;
-		if(counter >= 40){
-			counter=0;
-			quadrant++;
-			gre = sine[quadrant%128]	 >>2;
-			red = sine[(quadrant+43)%128]>>2;
-			blu = sine[(quadrant+85)%128]>>2;
-		}
-		accX = (accX & 0xFE)>>1;
-		accY = (accY & 0xFE)>>1;
-		accZ = (accZ & 0xFE)>>1;
+		
+		static uint8_t sleepEngage = 0;
 		static uint8_t cumulX = 0;
 		static uint8_t cumulY = 0;
 		static uint8_t cumulZ = 0;
+		
+		accX = (accX & 0xFE)>>1;
+		accY = (accY & 0xFE)>>1;
+		accZ = (accZ & 0xFE)>>1;
 		cumulX = cumul(cumulX, accX);
 		cumulY = cumul(cumulY, accY);
 		cumulZ = cumul(cumulZ, accZ);
-		g_counter = (g_counter + 1)%3;
-		neoPixelTest(cumulX);
-		neoPixelTest(cumulY);
-		neoPixelTest(cumulZ);
-		neoPixelTest(cumulY);
-		neoPixelTest(cumulZ);
-		neoPixelTest(cumulX);
+		g_counter = (g_counter + 1)%5;
+		
+		if(cumulX + cumulY + cumulZ == 0){
+			sleepEngage ++;
+			DDRB &= ~(1<<PB3 | 1<<PB4);
+		}else{
+// 			CLKPR = 0x80;							// Initialize CLKPR write sequence
+// 			CLKPR = 0x00;							// Set system prescaler to 1/256
+			g_eco = false;
+			sleepEngage = 0;
+			DDRB |= (1<<PB3 | 1<<PB4);
+			
+			counter += accX + accY + accZ;
+			if(counter >= 40){
+				counter=0;
+				quadrant++;
+// 				gre = sine[quadrant%128]	 >>2;
+// 				red = sine[(quadrant+43)%128]>>2;
+// 				blu = sine[(quadrant+85)%128]>>2;
+			}
+			neoPixelTest(cumulX);
+			neoPixelTest(cumulY);
+			neoPixelTest(cumulZ);
+			neoPixelTest(cumulY);
+			neoPixelTest(cumulZ);
+			neoPixelTest(cumulX);
+		}
+		if(sleepEngage == 255 || g_eco){
+			g_eco = true;
+//			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 7;	// enable watchdog  timer and interrupt for 2sec
+			DDRB = 0;								// set PORTB to Hi-Z
+			accel::sleep();
+// 			CLKPR = 0x80;							// Initialize CLKPR write sequence
+// 			CLKPR = 0x02;							// Set system prescaler to 1/...
+			set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+	 		sleep_mode();							// sleep enable
+			/* Wake-up */
+			DDRB |= 1<<PB3 | 1<<PB4;				// Outputs
+			//accel::init();
+		}
     }
 }
 
@@ -92,7 +122,7 @@ void neoPixelTest(uint8_t b)
 	cli();
 	
 	DDRB |= 1<<PB4;
-	volatile uint8_t *port = &PORTB;
+//	volatile uint8_t *port = &PORTB;
 	volatile uint8_t n1, n2 = 0;  // First, next bits out
 	uint8_t hi = PORTB |  (1<<PB4);
 	uint8_t lo = PORTB & ~(1<<PB4);
@@ -189,4 +219,10 @@ void neoPixelTest(uint8_t b)
 	);
 	
 	sei();
+}
+
+ISR(WDT_vect)
+{
+	WDTCR |= 1<<WDCE | 1<<WDE;
+	WDTCR = 0x00;
 }
