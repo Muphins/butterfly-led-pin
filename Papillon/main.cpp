@@ -17,107 +17,93 @@
 inline uint8_t cumul(uint8_t value, uint8_t plus);
 void neoPixelTest(uint8_t b);
 
-const uint8_t sine[128] PROGMEM = {
-		0,  0,  1,  1,  2,  4,  6,  8, 10, 12, 15, 18, 22, 25, 29, 34,
-		38, 42, 47, 52, 57, 63, 68, 74, 80, 86, 92, 98,104,110,116,123,
-		129,135,142,148,154,160,166,172,178,184,189,195,200,205,210,215,
-		219,224,228,231,235,238,241,244,246,248,250,252,253,254,255,255,
-		255,255,254,253,252,250,248,246,244,241,238,235,231,228,224,219,
-		215,210,205,200,195,189,184,178,172,166,160,154,148,142,135,129,
-		123,116,110,104, 98, 92, 86, 80, 74, 68, 63, 57, 52, 47, 42, 38,
-		34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
+// const uint8_t sine[128] PROGMEM = {
+// 		0,  0,  1,  1,  2,  4,  6,  8, 10, 12, 15, 18, 22, 25, 29, 34,
+// 		38, 42, 47, 52, 57, 63, 68, 74, 80, 86, 92, 98,104,110,116,123,
+// 		129,135,142,148,154,160,166,172,178,184,189,195,200,205,210,215,
+// 		219,224,228,231,235,238,241,244,246,248,250,252,253,254,255,255,
+// 		255,255,254,253,252,250,248,246,244,241,238,235,231,228,224,219,
+// 		215,210,205,200,195,189,184,178,172,166,160,154,148,142,135,129,
+// 		123,116,110,104, 98, 92, 86, 80, 74, 68, 63, 57, 52, 47, 42, 38,
+// 		34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
 
 uint8_t g_counter=0;
 bool g_eco = false;
 
+
 int main(void)
 {
+	static uint8_t sleepEngage = 0;
+	static uint8_t accX = 0;
+	static uint8_t accY = 0;
+	static uint8_t accZ = 0;
+	static uint8_t cumulX = 0;
+	static uint8_t cumulY = 0;
+	static uint8_t cumulZ = 0;
+	
 	MCUCR |= 1<<PUD;	// disable pull-up
 	ACSR |= (1<<ACD);	// disable analog comparator
 	PRR = 1<<PRTIM1 | 1<<PRTIM0 | 1<<PRUSI | 1<<PRADC;	// disable peripherals
-	uint8_t counter = 0, quadrant=0;
-	sei();
-	SoftI2CInit();
 	
+	sei();				// enable interrupts
+	
+	SoftI2CInit();
 	accel::init();
 	
- 	DDRB |= 1<<PB3 | 1<<PB4;
-	PORTB |= 1<<PB3;	// Enable LED
- 	PORTB &= ~(1<<PB4);
+ 	DDRB |= 1<<PB3 | 1<<PB4;	// outputs
+	PORTB |= 1<<PB3;			// Enable LED
+ 	PORTB &= ~(1<<PB4);			// reset LED_CMD
 	
-	uint8_t accX = 0;
-	uint8_t accY = 0;
-	uint8_t accZ = 0;
-// 	uint8_t red = 0;
-// 	uint8_t gre = 0;
-// 	uint8_t blu = 0;
     while (1) 
     {
-		accel::move(&accX, &accY, &accZ);
-		
-		static uint8_t sleepEngage = 0;
-		static uint8_t cumulX = 0;
-		static uint8_t cumulY = 0;
-		static uint8_t cumulZ = 0;
-		
-		accX = (accX & 0xFE)>>1;
-		accY = (accY & 0xFE)>>1;
-		accZ = (accZ & 0xFE)>>1;
-		cumulX = cumul(cumulX, accX);
-		cumulY = cumul(cumulY, accY);
-		cumulZ = cumul(cumulZ, accZ);
-		g_counter = (g_counter + 1)%5;
-		
-		if(cumulX + cumulY + cumulZ == 0){
-			sleepEngage ++;
-			DDRB &= ~(1<<PB3 | 1<<PB4);
-		}else{
-// 			CLKPR = 0x80;							// Initialize CLKPR write sequence
-// 			CLKPR = 0x00;							// Set system prescaler to 1/256
-			g_eco = false;
-			sleepEngage = 0;
-			DDRB |= (1<<PB3 | 1<<PB4);
+		if(!g_eco){
+			accel::move(&accX, &accY, &accZ);
+			accX = (accX & 0xFE)>>1;
+			accY = (accY & 0xFE)>>1;
+			accZ = (accZ & 0xFE)>>1;
 			
-			counter += accX + accY + accZ;
-			if(counter >= 40){
-				counter=0;
-//				quadrant++;
-// 				gre = pgm_read_byte(&(sine[quadrant%128]	 ))>>2;
-// 				red = pgm_read_byte(&(sine[(quadrant+43)%128]))>>2;
-// 				blu = pgm_read_byte(&(sine[(quadrant+85)%128]))>>2;
+			cumulX = cumul(cumulX, accX);
+			cumulY = cumul(cumulY, accY);
+			cumulZ = cumul(cumulZ, accZ);
+			g_counter = (g_counter + 1)%5;	// Decrement cumul only 1/5th of the time
+			
+			if(cumulX + cumulY + cumulZ == 0){
+				sleepEngage ++;
+				DDRB &= ~(1<<PB3 | 1<<PB4);
+			}else{
+				sleepEngage = 0;
+				DDRB |= (1<<PB3 | 1<<PB4);
+				neoPixelTest(cumulX);
+				neoPixelTest(cumulY);
+				neoPixelTest(cumulZ);
+				neoPixelTest(cumulY);
+				neoPixelTest(cumulZ);
+				neoPixelTest(cumulX);
 			}
-			neoPixelTest(cumulX);
-			neoPixelTest(cumulY);
-			neoPixelTest(cumulZ);
-			neoPixelTest(cumulY);
-			neoPixelTest(cumulZ);
-			neoPixelTest(cumulX);
-		}
-		if(!(PINB & 1<<PB1)){
-			_delay_us(80);
-			neoPixelTest(0x40);
-			neoPixelTest(0x40);
-			neoPixelTest(0x40);
-			neoPixelTest(0);
-			neoPixelTest(0);
-			neoPixelTest(0);
-//			for(;;);
 		}
 		if(sleepEngage == 255 || g_eco){
+			sleepEngage = 0;
 			g_eco = true;
-//			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 7;	// enable watchdog  timer and interrupt for 2sec
+//			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 7;	// enable watchdog  timer and interrupt for .25sec
 			DDRB = 0;								// set PORTB to Hi-Z
 //			accel::init();
-			accel::enableTransientIntLatch();
+			accel::checkIntSource();				// Unlatch int event
+//			accel::enableTransientIntLatch();
+		/* slow system-clock */
 // 			CLKPR = 0x80;							// Initialize CLKPR write sequence
 // 			CLKPR = 0x08;							// Set system prescaler to 1/...
 			set_sleep_mode(SLEEP_MODE_PWR_DOWN);	// SLEEP_MODE_PWR_DOWN
 	 		sleep_mode();							// sleep enable
-			/* Wake-up */
+		/* Wake-up */
+		}
+		if(!(PINB & 1<<PB1)){
+		/* Normal system-clock */
 // 			CLKPR = 0x80;							// Initialize CLKPR write sequence
 // 			CLKPR = 0x00;							// Set system prescaler to 1/...
+			g_eco = false;
+			accel::checkIntSource();				// Unlatch int event
+			accel::disableTransientIntLatch();
 			DDRB |= 1<<PB3 | 1<<PB4;				// Outputs
-			//accel::init();
 		}
     }
 }

@@ -37,13 +37,11 @@ void init()
 	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
 		if(SoftI2CWriteByte(MMA_CTRL_REG4) == I2cOk)
 			SoftI2CWriteByte(0b00100000);	// enable transient detection
-//			SoftI2CWriteByte(0b00000000);	// enable transient detection
 	SoftI2CStop();
 	SoftI2CStart();
 	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
 		if(SoftI2CWriteByte(MMA_CTRL_REG3) == I2cOk)
 			SoftI2CWriteByte(0b01000000);	// Enable wake by transient detection
-//			SoftI2CWriteByte(0b00000000);	// Enable wake by transient detection
 	SoftI2CStop();
 	/* set pulse detection registers */
 	SoftI2CStart();
@@ -97,6 +95,7 @@ tI2cStatus enableTransientIntLatch()
 		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
 			SoftI2CWriteByte(0b01000011);	// set 12.5Hz sleep, 800Hz wake, active mode
 	SoftI2CStop();
+	return I2cOk;
 }
 
 tI2cStatus disableTransientIntLatch()
@@ -110,7 +109,7 @@ tI2cStatus disableTransientIntLatch()
 	SoftI2CStart();
 	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
 		if(SoftI2CWriteByte(MMA_TRANSIENT_CFG) == I2cOk)
-			SoftI2CWriteByte(0b00001110);	// Int latched; detection on x, y, z through hi-pass filter
+			SoftI2CWriteByte(0b00001110);	// Int not-latched; detection on x, y, z through hi-pass filter
 	SoftI2CStop();
 	/* Activate device */
 	SoftI2CStart();
@@ -118,6 +117,7 @@ tI2cStatus disableTransientIntLatch()
 		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
 			SoftI2CWriteByte(0b01000011);	// set 12.5Hz sleep, 800Hz wake, active mode
 	SoftI2CStop();
+	return I2cOk;
 }
 
 tI2cStatus move(uint8_t *x, uint8_t *y, uint8_t *z)
