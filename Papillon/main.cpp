@@ -49,6 +49,7 @@ int main(void)
 	
 	SoftI2CInit();
 	accel::init();
+	accel::enableTransientIntLatch();
 	
  	DDRB |= 1<<PB3 | 1<<PB4;	// outputs
 	PORTB |= 1<<PB3;			// Enable LED
@@ -69,10 +70,12 @@ int main(void)
 			
 			if(cumulX + cumulY + cumulZ == 0){
 				sleepEngage ++;
-				DDRB &= ~(1<<PB3 | 1<<PB4);
+				DDRB = 0;
+				PORTB &= ~(1<<PB3 | 1<<PB4);
 			}else{
 				sleepEngage = 0;
 				DDRB |= (1<<PB3 | 1<<PB4);
+				PORTB |= 1<<PB3;			// Enable LED
 				neoPixelTest(cumulX);
 				neoPixelTest(cumulY);
 				neoPixelTest(cumulZ);
@@ -84,25 +87,26 @@ int main(void)
 		if(sleepEngage == 255 || g_eco){
 			sleepEngage = 0;
 			g_eco = true;
-//			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 7;	// enable watchdog  timer and interrupt for .25sec
+			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 3;	// enable watchdog  timer and interrupt for .25sec
 			DDRB = 0;								// set PORTB to Hi-Z
 //			accel::init();
-			accel::checkIntSource();				// Unlatch int event
-//			accel::enableTransientIntLatch();
+// 			accel::enableTransientIntLatch();
+// 			_delay_ms(25);
+// 			accel::checkIntSource();				// Unlatch int event
 		/* slow system-clock */
-// 			CLKPR = 0x80;							// Initialize CLKPR write sequence
-// 			CLKPR = 0x08;							// Set system prescaler to 1/...
+			CLKPR = 0x80;							// Initialize CLKPR write sequence
+			CLKPR = 0x08;							// Set system prescaler to 1/...
 			set_sleep_mode(SLEEP_MODE_PWR_DOWN);	// SLEEP_MODE_PWR_DOWN
 	 		sleep_mode();							// sleep enable
 		/* Wake-up */
 		}
 		if(!(PINB & 1<<PB1)){
 		/* Normal system-clock */
-// 			CLKPR = 0x80;							// Initialize CLKPR write sequence
-// 			CLKPR = 0x00;							// Set system prescaler to 1/...
+			CLKPR = 0x80;							// Initialize CLKPR write sequence
+			CLKPR = 0x00;							// Set system prescaler to 1/...
 			g_eco = false;
 			accel::checkIntSource();				// Unlatch int event
-			accel::disableTransientIntLatch();
+//			accel::disableTransientIntLatch();
 			DDRB |= 1<<PB3 | 1<<PB4;				// Outputs
 		}
     }

@@ -20,6 +20,7 @@
 #define MMA_OUT_Y_LSB		0x04
 #define MMA_OUT_Z_MSB		0x05
 #define MMA_OUT_Z_LSB		0x06
+#define MMA_SYSMOD			0x0B
 #define MMA_INT_SOURCE		0x0C
 #define MMA_XYZ_DATA_CFG	0x0E
 #define MMA_HP_CUTOFF		0x0F

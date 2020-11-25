@@ -54,6 +54,12 @@ void init()
 		if(SoftI2CWriteByte(MMA_TRANSIENT_THS) == I2cOk)
 			SoftI2CWriteByte(1);			// Threshold = value * .063g
 	SoftI2CStop();
+// 	SoftI2CStart();
+// 	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
+// 		if(SoftI2CWriteByte(MMA_TRANSIENT_COUNT) == I2cOk)
+// 			SoftI2CWriteByte(2);			// Debounce
+// 	SoftI2CStop();
+	
 	
 	/* Activate device */
 	SoftI2CStart();
@@ -78,6 +84,7 @@ tI2cStatus checkIntSource()
 
 tI2cStatus enableTransientIntLatch()
 {
+	/* standby */
 	SoftI2CStart();
 	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
 		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
@@ -100,6 +107,7 @@ tI2cStatus enableTransientIntLatch()
 
 tI2cStatus disableTransientIntLatch()
 {
+	/* standby */
 	SoftI2CStart();
 	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
 		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
