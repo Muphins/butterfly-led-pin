@@ -10,20 +10,22 @@
 #include <util/delay.h>
 #include <stdlib.h>
 #include <avr/sleep.h>
+#include <avr/pgmspace.h>
 //#include "twi.h"
 #include "MMA8453.h"
 
 inline uint8_t cumul(uint8_t value, uint8_t plus);
 void neoPixelTest(uint8_t b);
 
-const uint8_t sine[128] = {   0,  0,  1,  1,  2,  4,  6,  8, 10, 12, 15, 18, 22, 25, 29, 34,
-	38, 42, 47, 52, 57, 63, 68, 74, 80, 86, 92, 98,104,110,116,123,
-	129,135,142,148,154,160,166,172,178,184,189,195,200,205,210,215,
-	219,224,228,231,235,238,241,244,246,248,250,252,253,254,255,255,
-	255,255,254,253,252,250,248,246,244,241,238,235,231,228,224,219,
-	215,210,205,200,195,189,184,178,172,166,160,154,148,142,135,129,
-	123,116,110,104, 98, 92, 86, 80, 74, 68, 63, 57, 52, 47, 42, 38,
-34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
+const uint8_t sine[128] PROGMEM = {
+		0,  0,  1,  1,  2,  4,  6,  8, 10, 12, 15, 18, 22, 25, 29, 34,
+		38, 42, 47, 52, 57, 63, 68, 74, 80, 86, 92, 98,104,110,116,123,
+		129,135,142,148,154,160,166,172,178,184,189,195,200,205,210,215,
+		219,224,228,231,235,238,241,244,246,248,250,252,253,254,255,255,
+		255,255,254,253,252,250,248,246,244,241,238,235,231,228,224,219,
+		215,210,205,200,195,189,184,178,172,166,160,154,148,142,135,129,
+		123,116,110,104, 98, 92, 86, 80, 74, 68, 63, 57, 52, 47, 42, 38,
+		34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
 
 uint8_t g_counter=0;
 bool g_eco = false;
@@ -79,10 +81,10 @@ int main(void)
 			counter += accX + accY + accZ;
 			if(counter >= 40){
 				counter=0;
-				quadrant++;
-// 				gre = sine[quadrant%128]	 >>2;
-// 				red = sine[(quadrant+43)%128]>>2;
-// 				blu = sine[(quadrant+85)%128]>>2;
+//				quadrant++;
+// 				gre = pgm_read_byte(&(sine[quadrant%128]	 ))>>2;
+// 				red = pgm_read_byte(&(sine[(quadrant+43)%128]))>>2;
+// 				blu = pgm_read_byte(&(sine[(quadrant+85)%128]))>>2;
 			}
 			neoPixelTest(cumulX);
 			neoPixelTest(cumulY);
@@ -91,16 +93,29 @@ int main(void)
 			neoPixelTest(cumulZ);
 			neoPixelTest(cumulX);
 		}
+		if(!(PINB & 1<<PB1)){
+			_delay_us(80);
+			neoPixelTest(0x40);
+			neoPixelTest(0x40);
+			neoPixelTest(0x40);
+			neoPixelTest(0);
+			neoPixelTest(0);
+			neoPixelTest(0);
+//			for(;;);
+		}
 		if(sleepEngage == 255 || g_eco){
 			g_eco = true;
 //			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 7;	// enable watchdog  timer and interrupt for 2sec
 			DDRB = 0;								// set PORTB to Hi-Z
-			accel::sleep();
+//			accel::init();
+			accel::enableTransientIntLatch();
 // 			CLKPR = 0x80;							// Initialize CLKPR write sequence
-// 			CLKPR = 0x02;							// Set system prescaler to 1/...
-			set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+// 			CLKPR = 0x08;							// Set system prescaler to 1/...
+			set_sleep_mode(SLEEP_MODE_PWR_DOWN);	// SLEEP_MODE_PWR_DOWN
 	 		sleep_mode();							// sleep enable
 			/* Wake-up */
+// 			CLKPR = 0x80;							// Initialize CLKPR write sequence
+// 			CLKPR = 0x00;							// Set system prescaler to 1/...
 			DDRB |= 1<<PB3 | 1<<PB4;				// Outputs
 			//accel::init();
 		}
