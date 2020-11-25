@@ -37,6 +37,8 @@
 #define MMA_CTRL_REG4		0x2D
 #define MMA_CTRL_REG5		0x2E
 
+#define MMA_CTRL_REG1_VAL	0b01000000
+#define MMA_ACTIVE_MODE		1
 namespace accel{
 /*******************************************************************************
 *								  TYPEDEFS									   *
@@ -53,6 +55,8 @@ void init();
 tI2cStatus checkIntSource();
 tI2cStatus enableTransientIntLatch();
 tI2cStatus disableTransientIntLatch();
+tI2cStatus enableAutoSleep();
+tI2cStatus disableAutoSleep();
 tI2cStatus move(uint8_t *x, uint8_t *y, uint8_t *z);
 
 }
