@@ -88,7 +88,7 @@ int main(void)
 // 			cumulZ = cumul(cumulZ, accZ);
  			g_counter = (g_counter + 1)%12;	// Decrement cumul only 1/5th of the time
 			
-			if(accMean > 18){
+			if(accMean > 16){
 				hue += 8;
 				if(!g_counter && brightness < 96) brightness +=2;
 			}else{
@@ -109,9 +109,9 @@ int main(void)
 				PORTB |= 1<<PB3;			// Enable LED
 				
 				tI2cStatus i2cStatusTmp = SoftI2CStatus();
-				neoPixelTest(cumulX);
-				neoPixelTest(cumulY);
-				neoPixelTest(cumulZ);
+				neoPixelTest(cumulX);	// Green
+				neoPixelTest(cumulY);	// Red
+				neoPixelTest(cumulZ);	// Blue
 				if(i2cStatusTmp != I2cIdle && i2cStatusTmp != I2cOk){
 					neoPixelTest(0);
 					neoPixelTest(255);
@@ -119,8 +119,8 @@ int main(void)
 					_delay_ms(1);
 				}else{
 					neoPixelTest(cumulY);
-					neoPixelTest(cumulZ);
 					neoPixelTest(cumulX);
+					neoPixelTest(cumulZ);
 				}
 				
 			}

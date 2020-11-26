@@ -60,7 +60,7 @@
 #define MMA_CTRL_REG4		0x2D
 #define MMA_CTRL_REG5		0x2E
 /* Registers predefined values */
-#define MMA_CTRL_REG1_STB	(ASPL_12_5HZ<<ASPL_RATE0 | WAKE_400HZ<<DATA_RATE0 | 1<<FAST_READ)	// set 12.5Hz sleep, 800Hz wake, active mode
+#define MMA_CTRL_REG1_STB	(ASPL_12_5HZ<<ASPL_RATE0 | WAKE_400HZ<<DATA_RATE0 | 1<<LOW_NOISE | 1<<FAST_READ)	// set 12.5Hz sleep, 800Hz wake, active mode
 #define MMA_CTRL_REG1_ACT	(MMA_CTRL_REG1_STB | 1<<ACTIVE_MODE)
 namespace accel{
 /*******************************************************************************
