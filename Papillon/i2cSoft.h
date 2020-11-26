@@ -142,6 +142,7 @@ Returns:
 **********************************************************/
 tI2cStatus SoftI2CReadByte(uint8_t *data, bool ack);
 
+void SoftI2CError(tI2cStatus error);
 tI2cStatus SoftI2CStatus();
 
 #endif 

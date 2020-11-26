@@ -108,20 +108,21 @@ int main(void)
 				DDRB |= (1<<PB3 | 1<<PB4);
 				PORTB |= 1<<PB3;			// Enable LED
 				
-// 				tI2cStatus i2cStatusTmp = SoftI2CStatus();
-// 				if(i2cStatusTmp != I2cIdle && i2cStatusTmp != I2cOk){
-// 					neoPixelTest(0);
-// 					neoPixelTest(255);
-// 					neoPixelTest(0);
-// 					_delay_ms(100);
-// 				}
+				tI2cStatus i2cStatusTmp = SoftI2CStatus();
+				neoPixelTest(cumulX);
+				neoPixelTest(cumulY);
+				neoPixelTest(cumulZ);
+				if(i2cStatusTmp != I2cIdle && i2cStatusTmp != I2cOk){
+					neoPixelTest(0);
+					neoPixelTest(255);
+					neoPixelTest(0);
+					_delay_ms(1);
+				}else{
+					neoPixelTest(cumulY);
+					neoPixelTest(cumulZ);
+					neoPixelTest(cumulX);
+				}
 				
-				neoPixelTest(cumulX);
-				neoPixelTest(cumulY);
-				neoPixelTest(cumulZ);
-				neoPixelTest(cumulY);
-				neoPixelTest(cumulZ);
-				neoPixelTest(cumulX);
 			}
 		}
 		if(sleepEngage == 255 || g_eco){

@@ -33,7 +33,7 @@ void SoftI2CStart()
 	
 	SOFT_I2C_SDA_LOW;
 	H_DEL;
-	m_i2cStatus = I2cStartOk;
+//	m_i2cStatus = I2cStartOk;
 }
 
 void SoftI2CStop()
@@ -87,7 +87,7 @@ tI2cStatus SoftI2CWriteByte(uint8_t data)
 	SOFT_I2C_SCL_LOW;
 	H_DEL;
 	
-	m_i2cStatus = ack;
+	if(ack != I2cOk) m_i2cStatus = ack;
 	return ack;
 }
 
@@ -131,8 +131,19 @@ tI2cStatus SoftI2CReadByte(uint8_t *data, bool ack)
 	SOFT_I2C_SCL_LOW;
 	H_DEL;
 	
-	m_i2cStatus = I2cReadOk;
+//	m_i2cStatus = I2cReadOk;
 	return I2cOk;
+}
+
+void SoftI2CError(tI2cStatus error)
+{
+	if(m_i2cStatus == I2cIdle || m_i2cStatus == I2cOk){
+		if(error == I2cOk){
+			m_i2cStatus = I2cOk;
+			return;
+		}
+		m_i2cStatus = error;
+	}
 }
 
 tI2cStatus SoftI2CStatus()
@@ -140,4 +151,5 @@ tI2cStatus SoftI2CStatus()
 	tI2cStatus tmp = m_i2cStatus;
 	m_i2cStatus = I2cIdle;
 	return tmp;
+	//return I2cIdle;
 }
