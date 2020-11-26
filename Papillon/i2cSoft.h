@@ -142,5 +142,6 @@ Returns:
 **********************************************************/
 tI2cStatus SoftI2CReadByte(uint8_t *data, bool ack);
 
+tI2cStatus SoftI2CStatus();
 
 #endif 

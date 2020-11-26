@@ -15,6 +15,8 @@ www.eXtremeElectronics.co.in
 #define Q_DEL _delay_loop_2(3)
 #define H_DEL _delay_loop_2(5)
 
+static tI2cStatus m_i2cStatus = I2cIdle;
+
 void SoftI2CInit()
 {
 	SDAPORT&=(1<<SDA);
@@ -22,7 +24,7 @@ void SoftI2CInit()
 	
 	SOFT_I2C_SDA_HIGH;
 	SOFT_I2C_SCL_HIGH;
-	
+	m_i2cStatus = I2cIdle;
 }
 void SoftI2CStart()
 {
@@ -31,6 +33,7 @@ void SoftI2CStart()
 	
 	SOFT_I2C_SDA_LOW;
 	H_DEL;
+	m_i2cStatus = I2cStartOk;
 }
 
 void SoftI2CStop()
@@ -84,8 +87,8 @@ tI2cStatus SoftI2CWriteByte(uint8_t data)
 	SOFT_I2C_SCL_LOW;
 	H_DEL;
 	
+	m_i2cStatus = ack;
 	return ack;
-	
 }
 
 
@@ -128,5 +131,13 @@ tI2cStatus SoftI2CReadByte(uint8_t *data, bool ack)
 	SOFT_I2C_SCL_LOW;
 	H_DEL;
 	
+	m_i2cStatus = I2cReadOk;
 	return I2cOk;
+}
+
+tI2cStatus SoftI2CStatus()
+{
+	tI2cStatus tmp = m_i2cStatus;
+	m_i2cStatus = I2cIdle;
+	return tmp;
 }
