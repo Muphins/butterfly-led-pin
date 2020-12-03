@@ -18,6 +18,7 @@ void colorHSV(uint16_t hue, uint8_t sat, uint8_t val, uint8_t* r, uint8_t* g, ui
 inline uint8_t cumul(uint8_t value, uint8_t plus);
 inline void resetMean();
 void neoPixelTest(uint8_t b);
+inline int16_t sq(int16_t n){return n*n;}
 
 // const uint8_t sine[128] PROGMEM = {
 // 		0,  0,  1,  1,  2,  4,  6,  8, 10, 12, 15, 18, 22, 25, 29, 34,
@@ -29,7 +30,8 @@ void neoPixelTest(uint8_t b);
 // 		123,116,110,104, 98, 92, 86, 80, 74, 68, 63, 57, 52, 47, 42, 38,
 // 		34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
 
-#define MEAN_TAB_LEN	48
+#define MEAN_THRESHOLD	8
+#define MEAN_TAB_LEN	40
 uint8_t accMeanTab[MEAN_TAB_LEN];
 uint8_t accMeanIndex = 0;
 uint16_t accMean = 0;
@@ -88,7 +90,7 @@ int main(void)
 // 			cumulZ = cumul(cumulZ, accZ);
  			g_counter = (g_counter + 1)%12;	// Decrement cumul only 1/5th of the time
 			
-			if(accMean > 16){
+			if(accMean > MEAN_THRESHOLD){
 				hue += 8;
 				if(!g_counter && brightness < 96) brightness +=2;
 			}else{
@@ -98,7 +100,7 @@ int main(void)
 // 			if(accMean > MEAN_TAB_LEN * 255 * 3) accMean = 0;
 			
 			colorHSV(hue, 255, brightness, &cumulX, &cumulY, &cumulZ);
-			
+			cumulX += sq(2);
 			if(brightness == 0){
 				sleepEngage ++;
 				DDRB = 0;
@@ -118,9 +120,9 @@ int main(void)
 					neoPixelTest(0);
 					_delay_ms(1);
 				}else{
-					neoPixelTest(cumulY);
-					neoPixelTest(cumulX);
 					neoPixelTest(cumulZ);
+					neoPixelTest(cumulX);
+					neoPixelTest(cumulY);
 				}
 				
 			}

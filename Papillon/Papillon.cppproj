@@ -171,6 +171,12 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="filters.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="filters.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="i2cSoft.cpp">
       <SubType>compile</SubType>
     </Compile>
