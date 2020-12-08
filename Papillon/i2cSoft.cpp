@@ -12,8 +12,8 @@ www.eXtremeElectronics.co.in
 
 #include "i2csoft.h"
 
-#define Q_DEL _delay_loop_2(3)
-#define H_DEL _delay_loop_2(5)
+#define Q_DEL _delay_loop_2(1)	//3
+#define H_DEL _delay_loop_2(1)	//5
 
 static tI2cStatus m_i2cStatus = I2cIdle;
 

@@ -11,19 +11,14 @@ namespace accel{
 *								   VARIABLES								   *
 *******************************************************************************/
 bool autoSleep = false;
-static bool activeMode = false;
+static bool m_activeMode = false;
 /*******************************************************************************
 *                                    CODE                                      *
 *******************************************************************************/
 void init()
 {
 	/* standby */
-	activeMode = false;
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
-			SoftI2CWriteByte(MMA_CTRL_REG1_STB);	// Set to standby mode
-	SoftI2CStop();
+	standbyMode();
 	/* configure data-rate and wake/sleep scheme */
 	SoftI2CStart();
 	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
@@ -66,15 +61,52 @@ void init()
 	
 	
 	/* Activate device */
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
-			SoftI2CWriteByte(MMA_CTRL_REG1_ACT);
-	SoftI2CStop();
-	activeMode = true;
+	activeMode();
 }
 
-tI2cStatus checkIntSource()
+tI2cStatus enableTransientIntLatch()
+{
+	/* standby */
+	standbyMode();
+	/* set transient detection registers */
+	SoftI2CStart();
+	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
+		if(SoftI2CWriteByte(MMA_TRANSIENT_CFG) == I2cOk)
+			SoftI2CWriteByte(MMA_TRANSIENT_CFG_EVLATCH);	// Int latched; detection on x, y, z through hi-pass filter
+	SoftI2CStop();
+	/* Activate device */
+	activeMode();
+	return I2cOk;
+}
+
+tI2cStatus disableTransientIntLatch()
+{
+	/* standby */
+	standbyMode();
+	/* set transient detection registers */
+	SoftI2CStart();
+	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
+		if(SoftI2CWriteByte(MMA_TRANSIENT_CFG) == I2cOk)
+			SoftI2CWriteByte(MMA_TRANSIENT_CFG_DEFAULT);	// Int not-latched; detection on x, y, z through hi-pass filter
+	SoftI2CStop();
+	/* Activate device */
+	activeMode();
+	return I2cOk;
+}
+
+tI2cStatus checkIntSource(uint8_t *intSource)
+{
+	SoftI2CStart();
+	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) != I2cOk) return I2cNok;
+	if(SoftI2CWriteByte(MMA_INT_SOURCE) != I2cOk) return I2cNok;
+	SoftI2CStart();
+	if(SoftI2CWriteByte(I2C_MMA8453_READ) != I2cOk) return I2cNok;
+	SoftI2CReadByte(intSource, false);
+	SoftI2CStop();
+	return I2cOk;
+}
+
+tI2cStatus readIntTransient()
 {
 	uint8_t dummy;
 	SoftI2CStart();
@@ -87,65 +119,10 @@ tI2cStatus checkIntSource()
 	return I2cOk;
 }
 
-tI2cStatus enableTransientIntLatch()
-{
-	/* standby */
-	activeMode = false;
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
-			SoftI2CWriteByte(MMA_CTRL_REG1_STB);	// Set to standby mode
-	SoftI2CStop();
-	/* set transient detection registers */
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_TRANSIENT_CFG) == I2cOk)
-			SoftI2CWriteByte(MMA_TRANSIENT_CFG_EVLATCH);	// Int latched; detection on x, y, z through hi-pass filter
-	SoftI2CStop();
-	/* Activate device */
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
-			SoftI2CWriteByte(MMA_CTRL_REG1_ACT);	// set 12.5Hz sleep, 800Hz wake, active mode
-	SoftI2CStop();
-	activeMode = true;
-	return I2cOk;
-}
-
-tI2cStatus disableTransientIntLatch()
-{
-	/* standby */
-	activeMode = false;
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
-			SoftI2CWriteByte(MMA_CTRL_REG1_STB);	// Set to standby mode
-	SoftI2CStop();
-	/* set transient detection registers */
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_TRANSIENT_CFG) == I2cOk)
-			SoftI2CWriteByte(MMA_TRANSIENT_CFG_DEFAULT);	// Int not-latched; detection on x, y, z through hi-pass filter
-	SoftI2CStop();
-	/* Activate device */
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
-			SoftI2CWriteByte(MMA_CTRL_REG1_ACT);
-	SoftI2CStop();
-	activeMode = true;
-	return I2cOk;
-}
-
 tI2cStatus enableAutoSleep()
 {
 	/* standby */
-	activeMode = false;
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
-			SoftI2CWriteByte(MMA_CTRL_REG1_STB);
-	SoftI2CStop();
+	standbyMode();
 	/* configure data-rate and wake/sleep scheme */
 	SoftI2CStart();
 	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
@@ -153,46 +130,54 @@ tI2cStatus enableAutoSleep()
 			SoftI2CWriteByte(MMA_CTRL_REG2_DEFAULT | 1<<AUTO_SLEEP);
 	SoftI2CStop();
 	/* Activate device */
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
-			SoftI2CWriteByte(MMA_CTRL_REG1_ACT);
-	SoftI2CStop();
-	activeMode = true;
+	activeMode();
 	autoSleep = true;
 	return I2cOk;
 }
 
 tI2cStatus disableAutoSleep()
 {
-	/* standby */
-	activeMode = false;
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
-		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
-			SoftI2CWriteByte(MMA_CTRL_REG1_STB);
-	SoftI2CStop();
+	standbyMode();
 	/* configure data-rate and wake/sleep scheme */
 	SoftI2CStart();
 	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
 		if(SoftI2CWriteByte(MMA_CTRL_REG2) == I2cOk)
 			SoftI2CWriteByte(MMA_CTRL_REG2_DEFAULT);
 	SoftI2CStop();
+	
+	activeMode();
+	autoSleep = false;
+	return I2cOk;
+}
+
+tI2cStatus activeMode()
+{
 	/* Activate device */
 	SoftI2CStart();
 	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
 		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
 			SoftI2CWriteByte(MMA_CTRL_REG1_ACT);
 	SoftI2CStop();
-	activeMode = true;
-	autoSleep = false;
+	m_activeMode = true;
+	return I2cOk;
+}
+
+tI2cStatus standbyMode()
+{
+	/* standby */
+	m_activeMode = false;
+	SoftI2CStart();
+	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) == I2cOk)
+		if(SoftI2CWriteByte(MMA_CTRL_REG1) == I2cOk)
+			SoftI2CWriteByte(MMA_CTRL_REG1_STB);
+	SoftI2CStop();
 	return I2cOk;
 }
 
 tI2cStatus getAcc(int8_t *x, int8_t *y, int8_t *z)
 {
 	
-	if(activeMode){
+	if(m_activeMode){
 		SoftI2CStart();
 		if(SoftI2CWriteByte(I2C_MMA8453_WRITE) != I2cOk) return I2cNok;
 		if(SoftI2CWriteByte(MMA_OUT_X_MSB) != I2cOk) return I2cNok;

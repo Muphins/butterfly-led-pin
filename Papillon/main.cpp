@@ -41,6 +41,7 @@ uint16_t accMean = 0;
 uint8_t g_counter=0;
 bool g_eco = false;
 bool g_sleepCoolDown = false;
+bool g_dataReady = false;
 uint8_t g_sleepEngage = 0;
 
 static int8_t accX = 0;
@@ -51,13 +52,15 @@ static uint8_t brightRed = 0;
 static uint8_t brightGreen = 0;
 static uint8_t brightBlue = 0;
 
-cLPF lowPassX(128);
-cLPF lowPassY(128);
-cLPF lowPassZ(128);
+cLPF lowPassX(32);
+cLPF lowPassY(32);
+cLPF lowPassZ(32);
 
 int8_t filteredX = 0;
 int8_t filteredY = 0;
 int8_t filteredZ = 0;
+
+uint8_t g_accelIntSource = 0;
 
 int main(void)
 {
@@ -87,55 +90,63 @@ int main(void)
 			static uint16_t hue = 0;
 			static uint8_t brightness = 0;
 			
-			accel::getAcc(&accX, &accY, &accZ);
- 			accX = abs(accX);
- 			accY = abs(accY);
- 			accZ = abs(accZ);
-
- 			filteredX = accX - lowPassX.run(accX);
- 			filteredY = accY - lowPassY.run(accY);
- 			filteredZ = accZ - lowPassZ.run(accZ);
-
-			sumAxes = accX + accY + accZ;
- 			accMean -= accMeanTab[accMeanIndex];
-			accMean += sumAxes;
-			accMeanTab[accMeanIndex] = sumAxes;
-			accMeanIndex++;
-			if(accMeanIndex == MEAN_TAB_LEN) accMeanIndex = 0;
+			if(g_dataReady){
+				/* Get acceleration data */
+				g_dataReady = false;
+				accel::getAcc(&accX, &accY, &accZ);
+ 				accX = abs(accX);
+ 				accY = abs(accY);
+ 				accZ = abs(accZ);
+				/* filter acceleration data */
+ 				filteredX = accX - lowPassX.run(accX);
+ 				filteredY = accY - lowPassY.run(accY);
+ 				filteredZ = accZ - lowPassZ.run(accZ);
+				/* compute activation/Sleep threshold */
+				sumAxes = accX + accY + accZ;
+ 				accMean -= accMeanTab[accMeanIndex];
+				accMean += sumAxes;
+				accMeanTab[accMeanIndex] = sumAxes;
+				accMeanIndex++;
+				if(accMeanIndex == MEAN_TAB_LEN) accMeanIndex = 0;
+				/* count timeBase */
+ 				g_counter++;
+				if(g_counter == 12) g_counter = 0;
 			
- 			g_counter++;
-			if(g_counter == 12) g_counter = 0;
-			
-			if(accMean > MEAN_THRESHOLD){
-				hue += 8;
-				if(!g_counter && brightness < 96) brightness +=2;
-			}else{
-				if(!g_counter && brightness > 0) brightness --;
-			}
-// 			if(!g_counter && accMean > 0) accMean -=1;
-// 			if(accMean > MEAN_TAB_LEN * 255 * 3) accMean = 0;
-			
-			//colorHSV(hue, 255, brightness, &brightRed, &brightGreen, &brightBlue);
-			brightRed   = filteredX;
-			brightGreen = filteredY;
-			brightBlue  = filteredZ;
-			//brightRed += sq(2);
-			if(brightness == 0){
-				g_sleepEngage ++;
-				DDRB = 0;
-				PORTB &= ~(1<<PB3 | 1<<PB4);
-			}else{
-				g_sleepEngage = 0;
-				DDRB |= (1<<PB3 | 1<<PB4);
-				PORTB |= 1<<PB3;			// Enable LED
+				if(accMean > MEAN_THRESHOLD){
+					hue += 1310;
+					if(!g_counter && brightness < 32) brightness +=2;
+				}else{
+					if(!g_counter && brightness > 0) brightness --;
+				}
+	// 			if(!g_counter && accMean > 0) accMean -=1;
+	// 			if(accMean > MEAN_TAB_LEN * 255 * 3) accMean = 0;
 				
-				for(uint8_t i=0; i<18; i++){
-					neoPixelSendPixel(brightGreen);	// Green
-					neoPixelSendPixel(brightRed);	// Red
-					neoPixelSendPixel(brightBlue);	// Blue
+				/*Compute colors */
+				colorHSV(hue, 255, brightness, &brightRed, &brightGreen, &brightBlue);
+				brightRed   = filteredX>>2;
+				brightGreen = filteredY>>2;
+				brightBlue  = filteredZ>>2;
+				//brightRed += sq(2);
+				
+				/* Send colors to Pixels */
+				if(brightness == 0){
+					g_sleepEngage ++;
+					DDRB = 0;
+					PORTB &= ~(1<<PB3 | 1<<PB4);
+				}else{
+					g_sleepEngage = 0;
+					DDRB |= (1<<PB3 | 1<<PB4);
+					PORTB |= 1<<PB3;			// Enable LED
+				
+					for(uint8_t i=0; i<18; i++){
+						neoPixelSendPixel(brightGreen);	// Green
+						neoPixelSendPixel(brightRed);	// Red
+						neoPixelSendPixel(brightBlue);	// Blue
+					}
 				}
 			}
 		}
+		/* Sleep management */
 		if(g_sleepEngage == 255 || g_eco){
 			if(!g_eco){
 				g_eco = true;
@@ -158,11 +169,12 @@ int main(void)
 	 		sleep_mode();							// sleep enable
 		/* Wake-up */
 		}
+		/* Interrupt management */
 		if(!(PINB & 1<<PB1) && accel::autoSleep){
-			if(g_eco && !g_sleepCoolDown){
+			if(g_eco && !g_sleepCoolDown){			// Conditions for exiting sleep mode
 			/* Normal system-clock */
 				CLKPR = 0x80;							// Initialize CLKPR write sequence
-				CLKPR = 0x00;							// Set system prescaler to 1/...
+				CLKPR = 0x00;							// Set system prescaler to 1
 				g_eco = false;
 				accel::disableAutoSleep();
 //				accel::disableTransientIntLatch();
@@ -170,7 +182,15 @@ int main(void)
 			}else{
 				g_sleepCoolDown = false;
 			}
-			accel::checkIntSource();				// Unlatch int event
+			/* Check int sources from Accelerometer */
+			if(accel::checkIntSource(&g_accelIntSource) == I2cOk){
+				if(g_accelIntSource & accel::IntTRANS){
+					accel::readIntTransient();				// Unlatch TRANS int event
+				}
+				if(g_accelIntSource & accel::IntDRDY){
+					g_dataReady = true;
+				}
+			}
 		}
     }
 }

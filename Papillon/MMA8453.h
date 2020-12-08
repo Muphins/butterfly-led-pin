@@ -50,10 +50,12 @@
 	#define FAST_READ			1
 	#define ACTIVE_MODE			0
 	/* Values */
+		/* Auto sleep sample rates */
 	#define ASPL_50HZ			(0)
 	#define ASPL_12_5HZ			(1)
 	#define ASPL_6_25HZ			(2)
 	#define ASPL_1_56HZ			(3)
+		/* Awake sample rates */
 	#define WAKE_800HZ			(0)
 	#define WAKE_400HZ			(1)
 	#define WAKE_200HZ			(2)
@@ -77,7 +79,7 @@
 	#define MODS_HI_RES			(2)
 	#define MODS_LOW_POWER		(3)
 	
-#define MMA_CTRL_REG3		0x2C
+#define MMA_CTRL_REG3		0x2C		// On interrupt wake config
 	#define INT_WAKE_TRANS			6
 	#define INT_WAKE_ORIENT			5
 	#define INT_WAKE_PULSE			4
@@ -85,7 +87,7 @@
 	#define INT_WAKE_POLARITY		1
 	#define INT_WAKE_PP_OD			0
 	
-#define MMA_CTRL_REG4		0x2D
+#define MMA_CTRL_REG4		0x2D		// Interrupt source enable
 	#define INT_EN_SLEEP			7
 	#define INT_EN_TRANS			5
 	#define INT_EN_ORIENT			4
@@ -93,14 +95,14 @@
 	#define INT_EN_MOTION			2
 	#define INT_EN_DATA_RDY			0
 	
-#define MMA_CTRL_REG5		0x2E
+#define MMA_CTRL_REG5		0x2E		// Route interrupt to INT2 (0) or INT1 (1)
 /* Registers predefined values */
 #define MMA_CTRL_REG1_STB			(ASPL_12_5HZ<<ASPL_RATE0 | WAKE_200HZ<<DATA_RATE0 | 1<<LOW_NOISE | 1<<FAST_READ)
 #define MMA_CTRL_REG1_ACT			(MMA_CTRL_REG1_STB | 1<<ACTIVE_MODE)
 
 #define MMA_CTRL_REG2_DEFAULT		(MODS_LOW_NOISE<<SLEEP_MODS0 | 0<<AUTO_SLEEP | MODS_HI_RES<<WAKE_MODS0)
 #define MMA_CTRL_REG3_DEFAULT		(1<<INT_WAKE_TRANS)
-#define MMA_CTRL_REG4_DEFAULT		(1<<INT_EN_TRANS)
+#define MMA_CTRL_REG4_DEFAULT		(1<<INT_EN_TRANS | 1<<INT_EN_DATA_RDY)
 
 #define MMA_TRANSIENT_CFG_DEFAULT	(1<<TRANS_Z_EVFLAG | 1<<TRANS_Y_EVFLAG | 1<<TRANS_X_EVFLAG)
 #define MMA_TRANSIENT_CFG_EVLATCH	(MMA_TRANSIENT_CFG_DEFAULT | 1<<TRANS_EV_LATCH)
@@ -108,7 +110,14 @@ namespace accel{
 /*******************************************************************************
 *								  TYPEDEFS									   *
 *******************************************************************************/
-
+enum tIntSource{	// to be used with register MMA_INT_SOURCE as masking bits
+	IntASPL		= 1<<7,
+	IntTRANS	= 1<<5,
+	IntORIENT	= 1<<4,
+	IntPULSE	= 1<<3,
+	IntMOTION	= 1<<2,
+	IntDRDY		= 1<<0
+	};
 /*******************************************************************************
 *								 VARIABLES									   *
 *******************************************************************************/
@@ -117,11 +126,14 @@ extern bool autoSleep;
 *								 Prototypes									   *
 *******************************************************************************/
 void init();
-tI2cStatus checkIntSource();
 tI2cStatus enableTransientIntLatch();
 tI2cStatus disableTransientIntLatch();
+tI2cStatus checkIntSource(uint8_t *intSource);
+tI2cStatus readIntTransient();
 tI2cStatus enableAutoSleep();
 tI2cStatus disableAutoSleep();
+tI2cStatus activeMode();
+tI2cStatus standbyMode();
 tI2cStatus getAcc(int8_t *x, int8_t *y, int8_t *z);
 
 }
