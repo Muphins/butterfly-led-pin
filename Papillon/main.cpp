@@ -32,7 +32,7 @@ inline int16_t sq(int16_t n){return n*n;}
 // 		123,116,110,104, 98, 92, 86, 80, 74, 68, 63, 57, 52, 47, 42, 38,
 // 		34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
 
-#define MEAN_THRESHOLD	8
+#define MEAN_THRESHOLD	3
 #define MEAN_TAB_LEN	40
 uint8_t accMeanTab[MEAN_TAB_LEN];
 uint8_t accMeanIndex = 0;
@@ -56,9 +56,9 @@ cLPF lowPassX(32);
 cLPF lowPassY(32);
 cLPF lowPassZ(32);
 
-int8_t filteredX = 0;
-int8_t filteredY = 0;
-int8_t filteredZ = 0;
+uint8_t filteredX = 0;
+uint8_t filteredY = 0;
+uint8_t filteredZ = 0;
 
 uint8_t g_accelIntSource = 0;
 
@@ -77,7 +77,7 @@ int main(void)
 	SoftI2CInit();
 	accel::init();
 	accel::enableTransientIntLatch();
-	accel::enableAutoSleep();
+//	accel::enableAutoSleep();
 	
  	DDRB |= 1<<PB3 | 1<<PB4;	// outputs
 	PORTB |= 1<<PB3;			// Enable LED
@@ -98,23 +98,27 @@ int main(void)
  				accY = abs(accY);
  				accZ = abs(accZ);
 				/* filter acceleration data */
- 				filteredX = accX - lowPassX.run(accX);
- 				filteredY = accY - lowPassY.run(accY);
- 				filteredZ = accZ - lowPassZ.run(accZ);
+ 				filteredX = abs(accX - lowPassX.run(accX));
+ 				filteredY = abs(accY - lowPassY.run(accY));
+ 				filteredZ = abs(accZ - lowPassZ.run(accZ));
+				 
+				brightRed   = filteredX>>1;
+				brightGreen = filteredY>>1;
+				brightBlue  = filteredZ>>1;
 				/* compute activation/Sleep threshold */
-				sumAxes = accX + accY + accZ;
- 				accMean -= accMeanTab[accMeanIndex];
-				accMean += sumAxes;
-				accMeanTab[accMeanIndex] = sumAxes;
-				accMeanIndex++;
-				if(accMeanIndex == MEAN_TAB_LEN) accMeanIndex = 0;
+				sumAxes = filteredX + filteredY + filteredZ;
+//  				accMean -= accMeanTab[accMeanIndex];
+// 				accMean += sumAxes;
+// 				accMeanTab[accMeanIndex] = sumAxes;
+// 				accMeanIndex++;
+//				if(accMeanIndex == MEAN_TAB_LEN) accMeanIndex = 0;
 				/* count timeBase */
  				g_counter++;
-				if(g_counter == 12) g_counter = 0;
+				if(g_counter == 18) g_counter = 0;
 			
-				if(accMean > MEAN_THRESHOLD){
-					hue += 1310;
-					if(!g_counter && brightness < 32) brightness +=2;
+				if(sumAxes > MEAN_THRESHOLD){
+					hue += 32;
+					if(!g_counter && brightness < 96) brightness +=1;
 				}else{
 					if(!g_counter && brightness > 0) brightness --;
 				}
@@ -123,10 +127,6 @@ int main(void)
 				
 				/*Compute colors */
 				colorHSV(hue, 255, brightness, &brightRed, &brightGreen, &brightBlue);
-				brightRed   = filteredX>>2;
-				brightGreen = filteredY>>2;
-				brightBlue  = filteredZ>>2;
-				//brightRed += sq(2);
 				
 				/* Send colors to Pixels */
 				if(brightness == 0){
@@ -147,31 +147,32 @@ int main(void)
 			}
 		}
 		/* Sleep management */
-		if(g_sleepEngage == 255 || g_eco){
-			if(!g_eco){
-				g_eco = true;
-				g_sleepCoolDown = true;
- 				accel::enableAutoSleep();
-// 				_delay_ms(30);
-// 				accel::checkIntSource();				// Unlatch int event
-				g_sleepEngage = 0;
-				DDRB = 0;								// set PORTB to Hi-Z
-			}
-			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 3;	// enable watchdog  timer and interrupt for .125sec
-//			accel::init();
-// 			accel::enableTransientIntLatch();
-// 			_delay_ms(25);
-// 			accel::checkIntSource();				// Unlatch int event
-		/* slow system-clock */
-// 			CLKPR = 0x80;							// Initialize CLKPR write sequence
-// 			CLKPR = 0x08;							// Set system prescaler to 1/...
-			set_sleep_mode(SLEEP_MODE_PWR_DOWN);	// SLEEP_MODE_PWR_DOWN
-	 		sleep_mode();							// sleep enable
-		/* Wake-up */
-		}
+// 		if(g_sleepEngage == 255 || g_eco){
+// 			if(!g_eco){
+// 				g_eco = true;
+// 				g_sleepCoolDown = true;
+//  				accel::enableAutoSleep();
+// // 				_delay_ms(30);
+// // 				accel::checkIntSource();				// Unlatch int event
+// 				g_sleepEngage = 0;
+// 				DDRB = 0;								// set PORTB to Hi-Z
+// 			}
+// 			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 3;	// enable watchdog  timer and interrupt for .125sec
+// //			accel::init();
+// // 			accel::enableTransientIntLatch();
+// // 			_delay_ms(25);
+// // 			accel::checkIntSource();				// Unlatch int event
+// 		/* slow system-clock */
+// // 			CLKPR = 0x80;							// Initialize CLKPR write sequence
+// // 			CLKPR = 0x08;							// Set system prescaler to 1/...
+// 			set_sleep_mode(SLEEP_MODE_PWR_DOWN);	// SLEEP_MODE_PWR_DOWN
+// 	 		sleep_mode();							// sleep enable
+// 		/* Wake-up */
+// 		}
 		/* Interrupt management */
-		if(!(PINB & 1<<PB1) && accel::autoSleep){
-			if(g_eco && !g_sleepCoolDown){			// Conditions for exiting sleep mode
+//		_delay_ms(20);
+		if(!(PINB & 1<<PB1) /*&& accel::autoSleep*/){
+			if(g_eco && !g_sleepCoolDown /*&& accel::autoSleep*/){	// Conditions for exiting sleep mode
 			/* Normal system-clock */
 				CLKPR = 0x80;							// Initialize CLKPR write sequence
 				CLKPR = 0x00;							// Set system prescaler to 1
