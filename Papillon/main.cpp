@@ -32,7 +32,7 @@ inline int16_t sq(int16_t n){return n*n;}
 // 		123,116,110,104, 98, 92, 86, 80, 74, 68, 63, 57, 52, 47, 42, 38,
 // 		34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
 
-#define MEAN_THRESHOLD	3
+#define MEAN_THRESHOLD	2
 #define MEAN_TAB_LEN	40
 uint8_t accMeanTab[MEAN_TAB_LEN];
 uint8_t accMeanIndex = 0;
@@ -42,6 +42,7 @@ uint8_t g_counter=0;
 bool g_eco = false;
 bool g_sleepCoolDown = false;
 bool g_dataReady = false;
+bool g_LedsOn = true;
 uint8_t g_sleepEngage = 0;
 
 static int8_t accX = 0;
@@ -114,7 +115,7 @@ int main(void)
 //				if(accMeanIndex == MEAN_TAB_LEN) accMeanIndex = 0;
 				/* count timeBase */
  				g_counter++;
-				if(g_counter == 18) g_counter = 0;
+				if(g_counter == 7) g_counter = 0;
 			
 				if(sumAxes > MEAN_THRESHOLD){
 					hue += 32;
@@ -129,64 +130,56 @@ int main(void)
 				colorHSV(hue, 255, brightness, &brightRed, &brightGreen, &brightBlue);
 				
 				/* Send colors to Pixels */
-				if(brightness == 0){
+				if(brightness == 0 && !g_LedsOn){
 					g_sleepEngage ++;
-					DDRB = 0;
-					PORTB &= ~(1<<PB3 | 1<<PB4);
+// 					DDRB = 0;
+// 					PORTB &= ~(1<<PB3 | 1<<PB4);
 				}else{
+					g_LedsOn = true;
 					g_sleepEngage = 0;
-					DDRB |= (1<<PB3 | 1<<PB4);
-					PORTB |= 1<<PB3;			// Enable LED
+// 					DDRB |= (1<<PB3 | 1<<PB4);
+// 					PORTB |= 1<<PB3;			// Enable LED
 				
 					for(uint8_t i=0; i<18; i++){
 						neoPixelSendPixel(brightGreen);	// Green
 						neoPixelSendPixel(brightRed);	// Red
 						neoPixelSendPixel(brightBlue);	// Blue
 					}
+					if(brightness == 0) g_LedsOn = false;
 				}
 			}
 		}
 		/* Sleep management */
-// 		if(g_sleepEngage == 255 || g_eco){
-// 			if(!g_eco){
-// 				g_eco = true;
-// 				g_sleepCoolDown = true;
-//  				accel::enableAutoSleep();
-// // 				_delay_ms(30);
-// // 				accel::checkIntSource();				// Unlatch int event
-// 				g_sleepEngage = 0;
-// 				DDRB = 0;								// set PORTB to Hi-Z
-// 			}
-// 			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 3;	// enable watchdog  timer and interrupt for .125sec
-// //			accel::init();
-// // 			accel::enableTransientIntLatch();
-// // 			_delay_ms(25);
-// // 			accel::checkIntSource();				// Unlatch int event
-// 		/* slow system-clock */
-// // 			CLKPR = 0x80;							// Initialize CLKPR write sequence
-// // 			CLKPR = 0x08;							// Set system prescaler to 1/...
-// 			set_sleep_mode(SLEEP_MODE_PWR_DOWN);	// SLEEP_MODE_PWR_DOWN
-// 	 		sleep_mode();							// sleep enable
-// 		/* Wake-up */
-// 		}
-		/* Interrupt management */
-//		_delay_ms(20);
-		if(!(PINB & 1<<PB1) /*&& accel::autoSleep*/){
-			if(g_eco && !g_sleepCoolDown /*&& accel::autoSleep*/){	// Conditions for exiting sleep mode
-			/* Normal system-clock */
-				CLKPR = 0x80;							// Initialize CLKPR write sequence
-				CLKPR = 0x00;							// Set system prescaler to 1
-				g_eco = false;
-				accel::disableAutoSleep();
-//				accel::disableTransientIntLatch();
-				DDRB |= 1<<PB3 | 1<<PB4;				// Outputs
-			}else{
-				g_sleepCoolDown = false;
+		if(g_sleepEngage == 255 || g_eco){
+			if(!g_eco){
+				g_eco = true;
+				g_sleepCoolDown = true;
+ 				accel::enableAutoSleep();
+// 				_delay_ms(30);
+// 				accel::checkIntSource();				// Unlatch int event
+				g_sleepEngage = 0;
+				DDRB = 0;								// set PORTB to Hi-Z
+				PORTB &= ~(1<<PB3 | 1<<PB4);
 			}
+			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 3;	// enable watchdog  timer and interrupt for .125sec
+			set_sleep_mode(SLEEP_MODE_PWR_DOWN);	// SLEEP_MODE_PWR_DOWN
+	 		sleep_mode();							// sleep enable
+		/* Wake-up */
+		}
+		/* Interrupt management */
+		if(!(PINB & 1<<PB1)){
 			/* Check int sources from Accelerometer */
 			if(accel::checkIntSource(&g_accelIntSource) == I2cOk){
-				if(g_accelIntSource & accel::IntTRANS){
+				if(g_accelIntSource & accel::IntTRANS){		// Transient event
 					accel::readIntTransient();				// Unlatch TRANS int event
+					if(g_eco && !g_sleepCoolDown){			// Conditions for exiting sleep mode
+						DDRB |= (1<<PB3 | 1<<PB4);	// Outputs
+						PORTB |= 1<<PB3;			// Enable LEDs
+						g_eco = false;
+						accel::disableAutoSleep();
+					}else{									// eliminate Trans_INT that happens when accelerometer goes to sleep
+						g_sleepCoolDown = false;
+					}
 				}
 				if(g_accelIntSource & accel::IntDRDY){
 					g_dataReady = true;
