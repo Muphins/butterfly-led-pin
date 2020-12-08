@@ -189,56 +189,38 @@ tI2cStatus disableAutoSleep()
 	return I2cOk;
 }
 
-tI2cStatus move(uint8_t *x, uint8_t *y, uint8_t *z)
+tI2cStatus getAcc(int8_t *x, int8_t *y, int8_t *z)
 {
-	static uint8_t x_old,
-				   y_old,
-				   z_old;
-	uint8_t x_cur = 0,
-			y_cur = 0,
-			z_cur = 0;
 	
-	*x = 0;
-	*y = 0;
-	*z = 0;
-	
-	if(!activeMode){
-		x_old = 0;
-		y_old = 0;
-		z_old = 0;
-		return I2cOk;
+	if(activeMode){
+		SoftI2CStart();
+		if(SoftI2CWriteByte(I2C_MMA8453_WRITE) != I2cOk) return I2cNok;
+		if(SoftI2CWriteByte(MMA_OUT_X_MSB) != I2cOk) return I2cNok;
+		SoftI2CStart();
+		if(SoftI2CWriteByte(I2C_MMA8453_READ) != I2cOk) return I2cNok;
+		SoftI2CReadByte((uint8_t*)x, false);
+		SoftI2CStop();
+		
+		SoftI2CStart();
+		if(SoftI2CWriteByte(I2C_MMA8453_WRITE) != I2cOk) return I2cNok;
+		if(SoftI2CWriteByte(MMA_OUT_Y_MSB) != I2cOk) return I2cNok;
+		SoftI2CStart();
+		if(SoftI2CWriteByte(I2C_MMA8453_READ) != I2cOk) return I2cNok;
+		SoftI2CReadByte((uint8_t*)y, false);
+		SoftI2CStop();
+		
+		SoftI2CStart();
+		if(SoftI2CWriteByte(I2C_MMA8453_WRITE) != I2cOk) return I2cNok;
+		if(SoftI2CWriteByte(MMA_OUT_Z_MSB) != I2cOk) return I2cNok;
+		SoftI2CStart();
+		if(SoftI2CWriteByte(I2C_MMA8453_READ) != I2cOk) return I2cNok;
+		SoftI2CReadByte((uint8_t*)z, false);
+		SoftI2CStop();
+	}else{
+		*x = 0;
+		*y = 0;
+		*z = 0;
 	}
-	
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) != I2cOk) return I2cNok;
-	if(SoftI2CWriteByte(MMA_OUT_X_MSB) != I2cOk) return I2cNok;
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_READ) != I2cOk) return I2cNok;
-	SoftI2CReadByte(&x_cur, false);
-	SoftI2CStop();
-	
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) != I2cOk) return I2cNok;
-	if(SoftI2CWriteByte(MMA_OUT_Y_MSB) != I2cOk) return I2cNok;
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_READ) != I2cOk) return I2cNok;
-	SoftI2CReadByte(&y_cur, false);
-	SoftI2CStop();
-	
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_WRITE) != I2cOk) return I2cNok;
-	if(SoftI2CWriteByte(MMA_OUT_Z_MSB) != I2cOk) return I2cNok;
-	SoftI2CStart();
-	if(SoftI2CWriteByte(I2C_MMA8453_READ) != I2cOk) return I2cNok;
-	SoftI2CReadByte(&z_cur, false);
-	SoftI2CStop();
-	
-	*x=abs((int8_t)x_old - (int8_t)x_cur);
-	*y=abs((int8_t)y_old - (int8_t)y_cur);
-	*z=abs((int8_t)z_old - (int8_t)z_cur);
-	x_old = x_cur;
-	y_old = y_cur;
-	z_old = z_cur;
 	
 	return I2cOk;
 }

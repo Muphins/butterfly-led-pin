@@ -11,13 +11,15 @@
 #include <stdlib.h>
 #include <avr/sleep.h>
 #include <avr/pgmspace.h>
-//#include "twi.h"
+
 #include "MMA8453.h"
+#include "timers.h"
+#include "filters.h"
 
 void colorHSV(uint16_t hue, uint8_t sat, uint8_t val, uint8_t* r, uint8_t* g, uint8_t* b);
 inline uint8_t cumul(uint8_t value, uint8_t plus);
 inline void resetMean();
-void neoPixelTest(uint8_t b);
+void neoPixelSendPixel(uint8_t b);
 inline int16_t sq(int16_t n){return n*n;}
 
 // const uint8_t sine[128] PROGMEM = {
@@ -39,16 +41,27 @@ uint16_t accMean = 0;
 uint8_t g_counter=0;
 bool g_eco = false;
 bool g_sleepCoolDown = false;
+uint8_t g_sleepEngage = 0;
+
+static int8_t accX = 0;
+static int8_t accY = 0;
+static int8_t accZ = 0;
+
+static uint8_t brightRed = 0;
+static uint8_t brightGreen = 0;
+static uint8_t brightBlue = 0;
+
+cLPF lowPassX(128);
+cLPF lowPassY(128);
+cLPF lowPassZ(128);
+
+int8_t filteredX = 0;
+int8_t filteredY = 0;
+int8_t filteredZ = 0;
 
 int main(void)
 {
-	static uint8_t sleepEngage = 0;
-	static uint8_t accX = 0;
-	static uint8_t accY = 0;
-	static uint8_t accZ = 0;
-	static uint8_t cumulX = 0;
-	static uint8_t cumulY = 0;
-	static uint8_t cumulZ = 0;
+	
 	
 	MCUCR |= 1<<PUD;	// disable pull-up
 	ACSR |= (1<<ACD);	// disable analog comparator
@@ -74,10 +87,14 @@ int main(void)
 			static uint16_t hue = 0;
 			static uint8_t brightness = 0;
 			
-			accel::move(&accX, &accY, &accZ);
-// 			accX = (accX & 0xFE)>>1;
-// 			accY = (accY & 0xFE)>>1;
-// 			accZ = (accZ & 0xFE)>>1;
+			accel::getAcc(&accX, &accY, &accZ);
+ 			accX = abs(accX);
+ 			accY = abs(accY);
+ 			accZ = abs(accZ);
+
+ 			filteredX = accX - lowPassX.run(accX);
+ 			filteredY = accY - lowPassY.run(accY);
+ 			filteredZ = accZ - lowPassZ.run(accZ);
 
 			sumAxes = accX + accY + accZ;
  			accMean -= accMeanTab[accMeanIndex];
@@ -85,10 +102,9 @@ int main(void)
 			accMeanTab[accMeanIndex] = sumAxes;
 			accMeanIndex++;
 			if(accMeanIndex == MEAN_TAB_LEN) accMeanIndex = 0;
-// 			cumulX = cumul(cumulX, accX);
-// 			cumulY = cumul(cumulY, accY);
-// 			cumulZ = cumul(cumulZ, accZ);
- 			g_counter = (g_counter + 1)%12;	// Decrement cumul only 1/5th of the time
+			
+ 			g_counter++;
+			if(g_counter == 12) g_counter = 0;
 			
 			if(accMean > MEAN_THRESHOLD){
 				hue += 8;
@@ -99,42 +115,35 @@ int main(void)
 // 			if(!g_counter && accMean > 0) accMean -=1;
 // 			if(accMean > MEAN_TAB_LEN * 255 * 3) accMean = 0;
 			
-			colorHSV(hue, 255, brightness, &cumulX, &cumulY, &cumulZ);
-			cumulX += sq(2);
+			//colorHSV(hue, 255, brightness, &brightRed, &brightGreen, &brightBlue);
+			brightRed   = filteredX;
+			brightGreen = filteredY;
+			brightBlue  = filteredZ;
+			//brightRed += sq(2);
 			if(brightness == 0){
-				sleepEngage ++;
+				g_sleepEngage ++;
 				DDRB = 0;
 				PORTB &= ~(1<<PB3 | 1<<PB4);
 			}else{
-				sleepEngage = 0;
+				g_sleepEngage = 0;
 				DDRB |= (1<<PB3 | 1<<PB4);
 				PORTB |= 1<<PB3;			// Enable LED
 				
-				tI2cStatus i2cStatusTmp = SoftI2CStatus();
-				neoPixelTest(cumulX);	// Green
-				neoPixelTest(cumulY);	// Red
-				neoPixelTest(cumulZ);	// Blue
-				if(i2cStatusTmp != I2cIdle && i2cStatusTmp != I2cOk){
-					neoPixelTest(0);
-					neoPixelTest(255);
-					neoPixelTest(0);
-					_delay_ms(1);
-				}else{
-					neoPixelTest(cumulZ);
-					neoPixelTest(cumulX);
-					neoPixelTest(cumulY);
+				for(uint8_t i=0; i<18; i++){
+					neoPixelSendPixel(brightGreen);	// Green
+					neoPixelSendPixel(brightRed);	// Red
+					neoPixelSendPixel(brightBlue);	// Blue
 				}
-				
 			}
 		}
-		if(sleepEngage == 255 || g_eco){
+		if(g_sleepEngage == 255 || g_eco){
 			if(!g_eco){
 				g_eco = true;
 				g_sleepCoolDown = true;
  				accel::enableAutoSleep();
 // 				_delay_ms(30);
 // 				accel::checkIntSource();				// Unlatch int event
-				sleepEngage = 0;
+				g_sleepEngage = 0;
 				DDRB = 0;								// set PORTB to Hi-Z
 			}
 			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 3;	// enable watchdog  timer and interrupt for .125sec
@@ -155,11 +164,9 @@ int main(void)
 				CLKPR = 0x80;							// Initialize CLKPR write sequence
 				CLKPR = 0x00;							// Set system prescaler to 1/...
 				g_eco = false;
-//				_delay_ms(30);
 				accel::disableAutoSleep();
 //				accel::disableTransientIntLatch();
 				DDRB |= 1<<PB3 | 1<<PB4;				// Outputs
-//				resetMean();
 			}else{
 				g_sleepCoolDown = false;
 			}
@@ -170,7 +177,6 @@ int main(void)
 
 inline uint8_t cumul(uint8_t value, uint8_t plus)
 {
-//	static dummy = 255-value;
 	if(value > 0 && g_counter == 0) value --;
 	if(plus < (255-value)){
 		value += plus;
@@ -262,12 +268,11 @@ void colorHSV(uint16_t hue, uint8_t sat, uint8_t val, uint8_t* r, uint8_t* g, ui
 	*b = (((((*b * s1) >> 8) + s2) * v1) & 0xff00) >> 8;
 }
 
-void neoPixelTest(uint8_t b)
+void neoPixelSendPixel(uint8_t b)
 {
 	cli();
 	
 	DDRB |= 1<<PB4;
-//	volatile uint8_t *port = &PORTB;
 	volatile uint8_t n1, n2 = 0;  // First, next bits out
 	uint8_t hi = PORTB |  (1<<PB4);
 	uint8_t lo = PORTB & ~(1<<PB4);

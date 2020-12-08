@@ -122,7 +122,7 @@ tI2cStatus enableTransientIntLatch();
 tI2cStatus disableTransientIntLatch();
 tI2cStatus enableAutoSleep();
 tI2cStatus disableAutoSleep();
-tI2cStatus move(uint8_t *x, uint8_t *y, uint8_t *z);
+tI2cStatus getAcc(int8_t *x, int8_t *y, int8_t *z);
 
 }
 #endif /* MMA8453_H_ */
