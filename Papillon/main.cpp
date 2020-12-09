@@ -1,10 +1,6 @@
-/*
- * Papillon.cpp
- *
- * Created: 19/11/2020 14:56:54
- * Author : Be3
- */ 
-
+/*******************************************************************************
+*                                  INCLUDES                                    *
+*******************************************************************************/
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
@@ -16,12 +12,16 @@
 #include "timers.h"
 #include "filters.h"
 
+/*******************************************************************************
+*								  PROTOTYPES								   *
+*******************************************************************************/
 void colorHSV(uint16_t hue, uint8_t sat, uint8_t val, uint8_t* r, uint8_t* g, uint8_t* b);
 inline uint8_t cumul(uint8_t value, uint8_t plus);
-inline void resetMean();
 void neoPixelSendPixel(uint8_t b);
 inline int16_t sq(int16_t n){return n*n;}
-
+/*******************************************************************************
+*								  CONSTANTS									   *
+*******************************************************************************/
 // const uint8_t sine[128] PROGMEM = {
 // 		0,  0,  1,  1,  2,  4,  6,  8, 10, 12, 15, 18, 22, 25, 29, 34,
 // 		38, 42, 47, 52, 57, 63, 68, 74, 80, 86, 92, 98,104,110,116,123,
@@ -32,57 +32,63 @@ inline int16_t sq(int16_t n){return n*n;}
 // 		123,116,110,104, 98, 92, 86, 80, 74, 68, 63, 57, 52, 47, 42, 38,
 // 		34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
 
+#define STRIP_LEN		18
 #define MEAN_THRESHOLD	2
-#define MEAN_TAB_LEN	40
-uint8_t accMeanTab[MEAN_TAB_LEN];
-uint8_t accMeanIndex = 0;
-uint16_t accMean = 0;
+// #define MEAN_TAB_LEN	40
 
-uint8_t g_counter=0;
+/*******************************************************************************
+*								  VARIABLES									   *
+*******************************************************************************/
+// uint8_t accMeanTab[MEAN_TAB_LEN];
+// uint8_t accMeanIndex = 0;
+// uint16_t accMean = 0;
+
+/* Time base related */
+uint8_t g_timeCounter=0;
+bool g_dataReady = false;
+
+/* Power saving related */
 bool g_eco = false;
 bool g_sleepCoolDown = false;
-bool g_dataReady = false;
-bool g_LedsOn = true;
 uint8_t g_sleepEngage = 0;
 
-static int8_t accX = 0;
-static int8_t accY = 0;
-static int8_t accZ = 0;
-
+/* LED strip related */
+bool g_LedsOn = true;
 static uint8_t brightRed = 0;
 static uint8_t brightGreen = 0;
 static uint8_t brightBlue = 0;
 
+/* Accelerometer data */
+static int8_t accX = 0;
+static int8_t accY = 0;
+static int8_t accZ = 0;
 cLPF lowPassX(32);
 cLPF lowPassY(32);
 cLPF lowPassZ(32);
-
 uint8_t filteredX = 0;
 uint8_t filteredY = 0;
 uint8_t filteredZ = 0;
-
 uint8_t g_accelIntSource = 0;
-
+/*******************************************************************************
+*                                    CODE                                      *
+*******************************************************************************/
 int main(void)
 {
-	
-	
-	MCUCR |= 1<<PUD;	// disable pull-up
+	/* Setup AVR */
 	ACSR |= (1<<ACD);	// disable analog comparator
 	PRR = 1<<PRTIM1 | 1<<PRTIM0 | 1<<PRUSI | 1<<PRADC;	// disable peripherals
 	
-	resetMean();
-	
-	sei();				// enable interrupts
-	
-	SoftI2CInit();
-	accel::init();
-	accel::enableTransientIntLatch();
-//	accel::enableAutoSleep();
-	
+	MCUCR |= 1<<PUD;	// disable pull-up
  	DDRB |= 1<<PB3 | 1<<PB4;	// outputs
 	PORTB |= 1<<PB3;			// Enable LED
  	PORTB &= ~(1<<PB4);			// reset LED_CMD
+	
+	sei();				// enable interrupts
+	
+	/* Setup accelerometer */
+	SoftI2CInit();
+	accel::init();
+	accel::enableTransientIntLatch();
 	
     while (1) 
     {
@@ -92,6 +98,9 @@ int main(void)
 			static uint8_t brightness = 0;
 			
 			if(g_dataReady){
+				/* count timeBase */
+ 				g_timeCounter++;
+				if(g_timeCounter == 7) g_timeCounter = 0;
 				/* Get acceleration data */
 				g_dataReady = false;
 				accel::getAcc(&accX, &accY, &accZ);
@@ -108,23 +117,13 @@ int main(void)
 				brightBlue  = filteredZ>>1;
 				/* compute activation/Sleep threshold */
 				sumAxes = filteredX + filteredY + filteredZ;
-//  				accMean -= accMeanTab[accMeanIndex];
-// 				accMean += sumAxes;
-// 				accMeanTab[accMeanIndex] = sumAxes;
-// 				accMeanIndex++;
-//				if(accMeanIndex == MEAN_TAB_LEN) accMeanIndex = 0;
-				/* count timeBase */
- 				g_counter++;
-				if(g_counter == 7) g_counter = 0;
 			
 				if(sumAxes > MEAN_THRESHOLD){
 					hue += 32;
-					if(!g_counter && brightness < 96) brightness +=1;
+					if(!g_timeCounter && brightness < 96) brightness +=1;
 				}else{
-					if(!g_counter && brightness > 0) brightness --;
+					if(!g_timeCounter && brightness > 0) brightness --;
 				}
-	// 			if(!g_counter && accMean > 0) accMean -=1;
-	// 			if(accMean > MEAN_TAB_LEN * 255 * 3) accMean = 0;
 				
 				/*Compute colors */
 				colorHSV(hue, 255, brightness, &brightRed, &brightGreen, &brightBlue);
@@ -132,15 +131,11 @@ int main(void)
 				/* Send colors to Pixels */
 				if(brightness == 0 && !g_LedsOn){
 					g_sleepEngage ++;
-// 					DDRB = 0;
-// 					PORTB &= ~(1<<PB3 | 1<<PB4);
 				}else{
 					g_LedsOn = true;
 					g_sleepEngage = 0;
-// 					DDRB |= (1<<PB3 | 1<<PB4);
-// 					PORTB |= 1<<PB3;			// Enable LED
 				
-					for(uint8_t i=0; i<18; i++){
+					for(uint8_t i=0; i<STRIP_LEN; i++){
 						neoPixelSendPixel(brightGreen);	// Green
 						neoPixelSendPixel(brightRed);	// Red
 						neoPixelSendPixel(brightBlue);	// Blue
@@ -155,8 +150,6 @@ int main(void)
 				g_eco = true;
 				g_sleepCoolDown = true;
  				accel::enableAutoSleep();
-// 				_delay_ms(30);
-// 				accel::checkIntSource();				// Unlatch int event
 				g_sleepEngage = 0;
 				DDRB = 0;								// set PORTB to Hi-Z
 				PORTB &= ~(1<<PB3 | 1<<PB4);
@@ -188,26 +181,10 @@ int main(void)
 		}
     }
 }
-
-inline uint8_t cumul(uint8_t value, uint8_t plus)
-{
-	if(value > 0 && g_counter == 0) value --;
-	if(plus < (255-value)){
-		value += plus;
-	}else value = 255;
-	return value;
-}
-
-inline void resetMean()
-{
-	for(uint8_t index=0; index < MEAN_TAB_LEN; index ++){
-		accMeanTab[index]=0;
-	}
-	accMeanIndex = 0;
-	accMean = 0;
-}
-
-void colorHSV(uint16_t hue, uint8_t sat, uint8_t val, uint8_t* r, uint8_t* g, uint8_t* b)
+/*******************************************************************************
+*                                 FUNCTIONS                                    *
+*******************************************************************************/
+void colorHSV(uint16_t hue, uint8_t sat, uint8_t val, uint8_t* r, uint8_t* g, uint8_t* b)	// ~934.132 cycles => 116.767µs @ 8MHz
 {
 
 	// Remap 0-65535 to 0-1529. Pure red is CENTERED on the 64K rollover;

@@ -123,7 +123,7 @@ enum tIntSource{	// to be used with register MMA_INT_SOURCE as masking bits
 *******************************************************************************/
 extern bool autoSleep;
 /*******************************************************************************
-*								 Prototypes									   *
+*								 PROTOTYPES									   *
 *******************************************************************************/
 void init();
 tI2cStatus enableTransientIntLatch();
