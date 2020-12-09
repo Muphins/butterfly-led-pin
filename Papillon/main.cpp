@@ -11,7 +11,7 @@
 #include "MMA8453.h"
 #include "timers.h"
 #include "filters.h"
-
+#include "rng.h"
 /*******************************************************************************
 *								  PROTOTYPES								   *
 *******************************************************************************/
@@ -44,7 +44,7 @@ inline int16_t sq(int16_t n){return n*n;}
 // uint16_t accMean = 0;
 
 /* Time base related */
-uint8_t g_timeCounter=0;
+uint8_t g_cycleCounter=0;
 bool g_dataReady = false;
 
 /* Power saving related */
@@ -58,6 +58,11 @@ static uint8_t brightRed = 0;
 static uint8_t brightGreen = 0;
 static uint8_t brightBlue = 0;
 
+uint8_t stripRed__[STRIP_LEN];
+uint8_t stripGreen[STRIP_LEN];
+uint8_t stripBlue_[STRIP_LEN];
+uint8_t stripBright[STRIP_LEN];
+
 /* Accelerometer data */
 static int8_t accX = 0;
 static int8_t accY = 0;
@@ -69,11 +74,17 @@ uint8_t filteredX = 0;
 uint8_t filteredY = 0;
 uint8_t filteredZ = 0;
 uint8_t g_accelIntSource = 0;
+
+/* LED animation related */
+cRng rando;
+uint8_t g_animationCounter=0;
 /*******************************************************************************
 *                                    CODE                                      *
 *******************************************************************************/
 int main(void)
 {
+	uint8_t i;
+	uint8_t randomLed;
 	/* Setup AVR */
 	ACSR |= (1<<ACD);	// disable analog comparator
 	PRR = 1<<PRTIM1 | 1<<PRTIM0 | 1<<PRUSI | 1<<PRADC;	// disable peripherals
@@ -99,8 +110,11 @@ int main(void)
 			
 			if(g_dataReady){
 				/* count timeBase */
- 				g_timeCounter++;
-				if(g_timeCounter == 7) g_timeCounter = 0;
+ 				g_cycleCounter++;
+				if(g_cycleCounter == 4){		// 25 tick per second at 100Hz data rate
+					g_cycleCounter = 0;
+					g_animationCounter ++;
+				}
 				/* Get acceleration data */
 				g_dataReady = false;
 				accel::getAcc(&accX, &accY, &accZ);
@@ -120,13 +134,44 @@ int main(void)
 			
 				if(sumAxes > MEAN_THRESHOLD){
 					hue += 32;
-					if(!g_timeCounter && brightness < 96) brightness +=1;
+					if(!g_cycleCounter && brightness < 128) brightness +=1;
 				}else{
-					if(!g_timeCounter && brightness > 0) brightness --;
+					if(!g_cycleCounter && brightness > 0) brightness --;
 				}
 				
 				/*Compute colors */
-				colorHSV(hue, 255, brightness, &brightRed, &brightGreen, &brightBlue);
+				if(g_animationCounter == 7){
+					g_animationCounter = 0;
+					randomLed = rando.run();
+					/* Faster and more precise than a division */
+					if(randomLed<15)		randomLed=0;
+					else if(randomLed<29)	randomLed=1;
+					else if(randomLed<43)	randomLed=2;
+					else if(randomLed<57)	randomLed=3;
+					else if(randomLed<71)	randomLed=4;
+					else if(randomLed<86)	randomLed=5;
+					else if(randomLed<100)	randomLed=6;
+					else if(randomLed<114)	randomLed=7;
+					else if(randomLed<128)	randomLed=8;
+					else if(randomLed<142)	randomLed=9;
+					else if(randomLed<156)	randomLed=10;
+					else if(randomLed<170)	randomLed=11;
+					else if(randomLed<185)	randomLed=12;
+					else if(randomLed<199)	randomLed=13;
+					else if(randomLed<213)	randomLed=14;
+					else if(randomLed<227)	randomLed=15;
+					else if(randomLed<241)	randomLed=16;
+					else					randomLed=17;
+					stripBright[randomLed] = brightness;
+				}
+				if(!g_cycleCounter){
+					for(i=0; i<STRIP_LEN; i++){
+						colorHSV(hue, 255, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
+						if(stripBright[i] > 0){
+							stripBright[i]--;
+						}
+					}
+				}
 				
 				/* Send colors to Pixels */
 				if(brightness == 0 && !g_LedsOn){
@@ -135,10 +180,10 @@ int main(void)
 					g_LedsOn = true;
 					g_sleepEngage = 0;
 				
-					for(uint8_t i=0; i<STRIP_LEN; i++){
-						neoPixelSendPixel(brightGreen);	// Green
-						neoPixelSendPixel(brightRed);	// Red
-						neoPixelSendPixel(brightBlue);	// Blue
+					for(i=0; i<STRIP_LEN; i++){
+						neoPixelSendPixel(stripGreen[i]);	// Green
+						neoPixelSendPixel(stripRed__[i]);	// Red
+						neoPixelSendPixel(stripBlue_[i]);	// Blue
 					}
 					if(brightness == 0) g_LedsOn = false;
 				}

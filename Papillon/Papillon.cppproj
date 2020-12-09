@@ -192,6 +192,9 @@
     <Compile Include="MMA8453.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="rng.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="timers.cpp">
       <SubType>compile</SubType>
     </Compile>
