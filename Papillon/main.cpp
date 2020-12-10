@@ -34,6 +34,11 @@ inline int16_t sq(int16_t n){return n*n;}
 
 #define STRIP_LEN		18
 #define MEAN_THRESHOLD	2
+
+#define LED_FADE_SPEED	8
+#define ANIM_STARS_LEN	7
+#define ANIM_SNAKE_LEN	1
+#define ANIM_SWIPE_LEN	2
 // #define MEAN_TAB_LEN	40
 
 /*******************************************************************************
@@ -62,7 +67,9 @@ uint8_t stripRed__[STRIP_LEN];
 uint8_t stripGreen[STRIP_LEN];
 uint8_t stripBlue_[STRIP_LEN];
 uint8_t stripBright[STRIP_LEN];
-
+/* LEDs positions */
+uint8_t leftBotToTop[9] =  { 6, 5, 7, 4, 9, 8,10,12,11};
+uint8_t rightBotToTop[9] = { 2, 1, 3, 0,14,13,15,17,16};
 /* Accelerometer data */
 static int8_t accX = 0;
 static int8_t accY = 0;
@@ -78,13 +85,14 @@ uint8_t g_accelIntSource = 0;
 /* LED animation related */
 cRng rando;
 uint8_t g_animationCounter=0;
+int8_t g_animationDir = 1;
 /*******************************************************************************
 *                                    CODE                                      *
 *******************************************************************************/
 int main(void)
 {
 	uint8_t i;
-	uint8_t randomLed;
+	uint8_t indexLed=0;
 	/* Setup AVR */
 	ACSR |= (1<<ACD);	// disable analog comparator
 	PRR = 1<<PRTIM1 | 1<<PRTIM0 | 1<<PRUSI | 1<<PRADC;	// disable peripherals
@@ -138,41 +146,58 @@ int main(void)
 				}else{
 					if(!g_cycleCounter && brightness > 0) brightness --;
 				}
-				
-				/*Compute colors */
-				if(g_animationCounter == 7){
+				/* Compute Starlight animation */
+				if(g_animationCounter == ANIM_STARS_LEN){
 					g_animationCounter = 0;
-					randomLed = rando.run();
+					indexLed = rando.run();
 					/* Faster and more precise than a division */
-					if(randomLed<15)		randomLed=0;
-					else if(randomLed<29)	randomLed=1;
-					else if(randomLed<43)	randomLed=2;
-					else if(randomLed<57)	randomLed=3;
-					else if(randomLed<71)	randomLed=4;
-					else if(randomLed<86)	randomLed=5;
-					else if(randomLed<100)	randomLed=6;
-					else if(randomLed<114)	randomLed=7;
-					else if(randomLed<128)	randomLed=8;
-					else if(randomLed<142)	randomLed=9;
-					else if(randomLed<156)	randomLed=10;
-					else if(randomLed<170)	randomLed=11;
-					else if(randomLed<185)	randomLed=12;
-					else if(randomLed<199)	randomLed=13;
-					else if(randomLed<213)	randomLed=14;
-					else if(randomLed<227)	randomLed=15;
-					else if(randomLed<241)	randomLed=16;
-					else					randomLed=17;
-					stripBright[randomLed] = brightness;
+					if     (indexLed <  15)			indexLed= 0;
+					else if(indexLed <  29)	indexLed= 1;
+					else if(indexLed <  43)	indexLed= 2;
+					else if(indexLed <  57)	indexLed= 3;
+					else if(indexLed <  71)	indexLed= 4;
+					else if(indexLed <  86)	indexLed= 5;
+					else if(indexLed < 100)	indexLed= 6;
+					else if(indexLed < 114)	indexLed= 7;
+					else if(indexLed < 128)	indexLed= 8;
+					else if(indexLed < 142)	indexLed= 9;
+					else if(indexLed < 156)	indexLed=10;
+					else if(indexLed < 171)	indexLed=11;
+					else if(indexLed < 185)	indexLed=12;
+					else if(indexLed < 199)	indexLed=13;
+					else if(indexLed < 213)	indexLed=14;
+					else if(indexLed < 227)	indexLed=15;
+					else if(indexLed < 241)	indexLed=16;
+					else					indexLed=17;
+					stripBright[indexLed] = brightness;
 				}
+				/* Compute Snake animation */
+// 				if(g_animationCounter == ANIM_SNAKE_LEN){
+// 					g_animationCounter = 0;
+// 					stripBright[indexLed] = brightness;
+// 					indexLed++;
+// 					if(indexLed == STRIP_LEN) indexLed = 0;
+// 				}
+				/* compute Swipe animation */
+// 				if(g_animationCounter == ANIM_SWIPE_LEN){
+// 					g_animationCounter = 0;
+// 					stripBright[leftBotToTop[indexLed]]  = brightness;
+// 					stripBright[rightBotToTop[indexLed]] = brightness;
+// 					indexLed += g_animationDir;
+// 					if(indexLed == STRIP_LEN/2-1) g_animationDir = -1;
+// 					if(indexLed == 0) g_animationDir = 1;
+// 				}
+				/* Compute colors */
 				if(!g_cycleCounter){
 					for(i=0; i<STRIP_LEN; i++){
 						colorHSV(hue, 255, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
-						if(stripBright[i] > 0){
-							stripBright[i]--;
+						if(stripBright[i] > LED_FADE_SPEED){
+							stripBright[i]-=LED_FADE_SPEED;
+						}else{
+							stripBright[i]=0;
 						}
 					}
 				}
-				
 				/* Send colors to Pixels */
 				if(brightness == 0 && !g_LedsOn){
 					g_sleepEngage ++;
