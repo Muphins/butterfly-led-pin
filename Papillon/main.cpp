@@ -13,6 +13,19 @@
 #include "filters.h"
 #include "rng.h"
 /*******************************************************************************
+*								  TYPEDEFS									   *
+*******************************************************************************/
+struct tSplit{
+	unsigned LSB :8;
+	unsigned MSB :8;
+};
+
+union t16_t{
+	uint16_t value;
+	tSplit	 split;
+};
+
+/*******************************************************************************
 *								  PROTOTYPES								   *
 *******************************************************************************/
 void colorHSV(uint16_t hue, uint8_t sat, uint8_t val, uint8_t* r, uint8_t* g, uint8_t* b);
@@ -70,6 +83,9 @@ uint8_t stripBright[STRIP_LEN];
 /* LEDs positions */
 uint8_t leftBotToTop[9] =  { 6, 5, 7, 4, 9, 8,10,12,11};
 uint8_t rightBotToTop[9] = { 2, 1, 3, 0,14,13,15,17,16};
+int8_t ledXPos[18] = {22,49,47,22,-22,-49,-47,-22,-16,-38,-49,-50,-28,16,38,49,50,28};
+int8_t ledYPos[18] = {19,25,55,36,19,25,55,36,-16,-14,-31,-50,-34,-16,-14,-31,-50,-34};
+
 /* Accelerometer data */
 static int8_t accX = 0;
 static int8_t accY = 0;
@@ -86,6 +102,7 @@ uint8_t g_accelIntSource = 0;
 cRng rando;
 uint8_t g_animationCounter=0;
 int8_t g_animationDir = 1;
+uint8_t proxiLight[9] = {128,96,48,16,12,8,4,2,1};
 /*******************************************************************************
 *                                    CODE                                      *
 *******************************************************************************/
@@ -93,6 +110,7 @@ int main(void)
 {
 	uint8_t i;
 	uint8_t indexLed=0;
+	int8_t posX, posY;
 	/* Setup AVR */
 	ACSR |= (1<<ACD);	// disable analog comparator
 	PRR = 1<<PRTIM1 | 1<<PRTIM0 | 1<<PRUSI | 1<<PRADC;	// disable peripherals
@@ -126,6 +144,8 @@ int main(void)
 				/* Get acceleration data */
 				g_dataReady = false;
 				accel::getAcc(&accX, &accY, &accZ);
+				posX = -accY;
+				posY = -accX;
  				accX = abs(accX);
  				accY = abs(accY);
  				accZ = abs(accZ);
@@ -146,31 +166,52 @@ int main(void)
 				}else{
 					if(!g_cycleCounter && brightness > 0) brightness --;
 				}
-				/* Compute Starlight animation */
-				if(g_animationCounter == ANIM_STARS_LEN){
-					g_animationCounter = 0;
-					indexLed = rando.run();
-					/* Faster and more precise than a division */
-					if     (indexLed <  15)			indexLed= 0;
-					else if(indexLed <  29)	indexLed= 1;
-					else if(indexLed <  43)	indexLed= 2;
-					else if(indexLed <  57)	indexLed= 3;
-					else if(indexLed <  71)	indexLed= 4;
-					else if(indexLed <  86)	indexLed= 5;
-					else if(indexLed < 100)	indexLed= 6;
-					else if(indexLed < 114)	indexLed= 7;
-					else if(indexLed < 128)	indexLed= 8;
-					else if(indexLed < 142)	indexLed= 9;
-					else if(indexLed < 156)	indexLed=10;
-					else if(indexLed < 171)	indexLed=11;
-					else if(indexLed < 185)	indexLed=12;
-					else if(indexLed < 199)	indexLed=13;
-					else if(indexLed < 213)	indexLed=14;
-					else if(indexLed < 227)	indexLed=15;
-					else if(indexLed < 241)	indexLed=16;
-					else					indexLed=17;
-					stripBright[indexLed] = brightness;
+				/* Compute Ball animation */
+				if(!g_cycleCounter){
+					if(posX >  63) posX =  63;
+					if(posX < -63) posX = -63;
+					if(posY >  63) posY =  63;
+					if(posY < -63) posY = -63;
+					for(i=0; i<STRIP_LEN; i++){
+						uint8_t x = abs(posX - ledXPos[i]);
+						uint8_t y = abs(posY - ledYPos[i]);
+						t16_t distComp;
+						distComp.value = (x*x)+(y*y);
+						if(distComp.split.MSB < 8){
+							uint8_t bright = proxiLight[distComp.split.MSB];
+							colorHSV(hue, 255, bright, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
+						}else{
+							stripRed__[i] = 0;
+							stripGreen[i] = 0;
+							stripBlue_[i] = 0;
+						}
+					}
 				}
+				/* Compute Starlight animation */
+// 				if(g_animationCounter == ANIM_STARS_LEN){
+// 					g_animationCounter = 0;
+// 					indexLed = rando.run();
+// 					/* Faster and more precise than a division */
+// 					if     (indexLed <  15)			indexLed= 0;
+// 					else if(indexLed <  29)	indexLed= 1;
+// 					else if(indexLed <  43)	indexLed= 2;
+// 					else if(indexLed <  57)	indexLed= 3;
+// 					else if(indexLed <  71)	indexLed= 4;
+// 					else if(indexLed <  86)	indexLed= 5;
+// 					else if(indexLed < 100)	indexLed= 6;
+// 					else if(indexLed < 114)	indexLed= 7;
+// 					else if(indexLed < 128)	indexLed= 8;
+// 					else if(indexLed < 142)	indexLed= 9;
+// 					else if(indexLed < 156)	indexLed=10;
+// 					else if(indexLed < 171)	indexLed=11;
+// 					else if(indexLed < 185)	indexLed=12;
+// 					else if(indexLed < 199)	indexLed=13;
+// 					else if(indexLed < 213)	indexLed=14;
+// 					else if(indexLed < 227)	indexLed=15;
+// 					else if(indexLed < 241)	indexLed=16;
+// 					else					indexLed=17;
+// 					stripBright[indexLed] = brightness;
+// 				}
 				/* Compute Snake animation */
 // 				if(g_animationCounter == ANIM_SNAKE_LEN){
 // 					g_animationCounter = 0;
@@ -188,16 +229,16 @@ int main(void)
 // 					if(indexLed == 0) g_animationDir = 1;
 // 				}
 				/* Compute colors */
-				if(!g_cycleCounter){
-					for(i=0; i<STRIP_LEN; i++){
-						colorHSV(hue, 255, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
-						if(stripBright[i] > LED_FADE_SPEED){
-							stripBright[i]-=LED_FADE_SPEED;
-						}else{
-							stripBright[i]=0;
-						}
-					}
-				}
+// 				if(!g_cycleCounter){
+// 					for(i=0; i<STRIP_LEN; i++){
+// 						colorHSV(hue, 255, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
+// 						if(stripBright[i] > LED_FADE_SPEED){
+// 							stripBright[i]-=LED_FADE_SPEED;
+// 						}else{
+// 							stripBright[i]=0;
+// 						}
+// 					}
+// 				}
 				/* Send colors to Pixels */
 				if(brightness == 0 && !g_LedsOn){
 					g_sleepEngage ++;
