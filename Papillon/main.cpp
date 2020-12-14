@@ -46,12 +46,13 @@ inline int16_t sq(int16_t n){return n*n;}
 // 		34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
 
 #define STRIP_LEN		18
-#define MEAN_THRESHOLD	2
+#define MEAN_THRESHOLD	3
 
 #define LED_FADE_SPEED	8
 #define ANIM_STARS_LEN	7
 #define ANIM_SNAKE_LEN	1
 #define ANIM_SWIPE_LEN	2
+#define PROXI_LIGHT_LEN	16 //9
 // #define MEAN_TAB_LEN	40
 
 /*******************************************************************************
@@ -83,16 +84,16 @@ uint8_t stripBright[STRIP_LEN];
 /* LEDs positions */
 uint8_t leftBotToTop[9] =  { 6, 5, 7, 4, 9, 8,10,12,11};
 uint8_t rightBotToTop[9] = { 2, 1, 3, 0,14,13,15,17,16};
-int8_t ledXPos[18] = {22,49,47,22,-22,-49,-47,-22,-16,-38,-49,-50,-28,16,38,49,50,28};
-int8_t ledYPos[18] = {19,25,55,36,19,25,55,36,-16,-14,-31,-50,-34,-16,-14,-31,-50,-34};
+int8_t ledXPos[18] = {22,49,35,22,-22,-49,-35,-22,-16,-38,-49,-50,-28, 16, 38, 49, 50, 28};
+int8_t ledYPos[18] = {19,25,55,36, 19, 25, 55, 36,-16,-14,-31,-50,-34,-16,-14,-31,-50,-34};
 
 /* Accelerometer data */
 static int8_t accX = 0;
 static int8_t accY = 0;
 static int8_t accZ = 0;
-cLPF lowPassX(32);
-cLPF lowPassY(32);
-cLPF lowPassZ(32);
+cLPF lowPassX(16);
+cLPF lowPassY(16);
+cLPF lowPassZ(16);
 uint8_t filteredX = 0;
 uint8_t filteredY = 0;
 uint8_t filteredZ = 0;
@@ -102,7 +103,8 @@ uint8_t g_accelIntSource = 0;
 cRng rando;
 uint8_t g_animationCounter=0;
 int8_t g_animationDir = 1;
-uint8_t proxiLight[9] = {128,96,48,16,12,8,4,2,1};
+//uint8_t proxiLight[9] = {128,96,48,16,12,8,4,2,1};
+uint8_t proxiLight[16] = {128,113,98,85,72,61,50,41,32,25,18,13,8,5,2,1};
 /*******************************************************************************
 *                                    CODE                                      *
 *******************************************************************************/
@@ -144,15 +146,18 @@ int main(void)
 				/* Get acceleration data */
 				g_dataReady = false;
 				accel::getAcc(&accX, &accY, &accZ);
-				posX = -accY;
-				posY = -accX;
- 				accX = abs(accX);
- 				accY = abs(accY);
- 				accZ = abs(accZ);
+//  			accX = abs(accX);
+//  			accY = abs(accY);
+//  			accZ = abs(accZ);
 				/* filter acceleration data */
  				filteredX = abs(accX - lowPassX.run(accX));
  				filteredY = abs(accY - lowPassY.run(accY));
  				filteredZ = abs(accZ - lowPassZ.run(accZ));
+				
+// 				posX = lowPassY.read() - accY;
+// 				posY = lowPassX.read() - accX;
+				posX = -lowPassY.read();
+				posY = -lowPassX.read();
 				 
 				brightRed   = filteredX>>1;
 				brightGreen = filteredY>>1;
@@ -176,9 +181,11 @@ int main(void)
 						uint8_t x = abs(posX - ledXPos[i]);
 						uint8_t y = abs(posY - ledYPos[i]);
 						t16_t distComp;
-						distComp.value = (x*x)+(y*y);
-						if(distComp.split.MSB < 8){
+						distComp.value = ((x*x)+(y*y))<<1;
+//						distComp.value = (x*x)+(y*y);
+						if(distComp.split.MSB < PROXI_LIGHT_LEN){
 							uint8_t bright = proxiLight[distComp.split.MSB];
+							bright = ((uint16_t)(bright*brightness))>>7;
 							colorHSV(hue, 255, bright, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
 						}else{
 							stripRed__[i] = 0;
