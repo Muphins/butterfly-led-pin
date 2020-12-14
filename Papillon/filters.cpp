@@ -5,10 +5,10 @@
 /*******************************************************************************
 *                                    CODE                                      *
 *******************************************************************************/
-cLPF::cLPF(uint8_t ratio_32): m_value(0), m_retValue(0)/*, m_sign(false)*/
+cLPF::cLPF(uint8_t ratio): m_value(0), m_retValue(0)/*, m_sign(false)*/
 {
-	m_ratio = ratio_32;
-	m_rationInv = FLOAT_TO_FACTOR(1) - ratio_32;
+	m_ratio = ratio;
+	m_rationInv = FLOAT_TO_FACTOR(1) - ratio;
 }
 
 int8_t cLPF::run(int8_t sample)

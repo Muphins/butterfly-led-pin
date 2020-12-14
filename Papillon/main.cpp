@@ -48,8 +48,8 @@ inline int16_t sq(int16_t n){return n*n;}
 #define STRIP_LEN		18
 #define MEAN_THRESHOLD	3
 
-#define LED_FADE_SPEED	8
-#define ANIM_STARS_LEN	7
+#define LED_FADE_SPEED	4
+#define ANIM_STARS_LEN	13
 #define ANIM_SNAKE_LEN	1
 #define ANIM_SWIPE_LEN	2
 #define PROXI_LIGHT_LEN	16 //9
@@ -81,6 +81,7 @@ uint8_t stripRed__[STRIP_LEN];
 uint8_t stripGreen[STRIP_LEN];
 uint8_t stripBlue_[STRIP_LEN];
 uint8_t stripBright[STRIP_LEN];
+uint16_t stripHue[STRIP_LEN];
 /* LEDs positions */
 uint8_t leftBotToTop[9] =  { 6, 5, 7, 4, 9, 8,10,12,11};
 uint8_t rightBotToTop[9] = { 2, 1, 3, 0,14,13,15,17,16};
@@ -91,9 +92,12 @@ int8_t ledYPos[18] = {19,25,55,36, 19, 25, 55, 36,-16,-14,-31,-50,-34,-16,-14,-3
 static int8_t accX = 0;
 static int8_t accY = 0;
 static int8_t accZ = 0;
-cLPF lowPassX(16);
-cLPF lowPassY(16);
-cLPF lowPassZ(16);
+cLPF lowPassX(2);
+cLPF lowPassY(2);
+cLPF lowPassZ(2);
+cLPF lowPass2X(128);
+cLPF lowPass2Y(128);
+//cLPF lowPass2Z(48);
 uint8_t filteredX = 0;
 uint8_t filteredY = 0;
 uint8_t filteredZ = 0;
@@ -154,11 +158,6 @@ int main(void)
  				filteredY = abs(accY - lowPassY.run(accY));
  				filteredZ = abs(accZ - lowPassZ.run(accZ));
 				
-// 				posX = lowPassY.read() - accY;
-// 				posY = lowPassX.read() - accX;
-				posX = -lowPassY.read();
-				posY = -lowPassX.read();
-				 
 				brightRed   = filteredX>>1;
 				brightGreen = filteredY>>1;
 				brightBlue  = filteredZ>>1;
@@ -171,7 +170,35 @@ int main(void)
 				}else{
 					if(!g_cycleCounter && brightness > 0) brightness --;
 				}
+				/* Compute Starlight animation */
+				if(g_animationCounter == ANIM_STARS_LEN){
+					g_animationCounter = 0;
+					indexLed = rando.run();
+					/* Faster and more precise than a division */
+					if     (indexLed <  15)	indexLed= 0;
+					else if(indexLed <  29)	indexLed= 1;
+					else if(indexLed <  43)	indexLed= 2;
+					else if(indexLed <  57)	indexLed= 3;
+					else if(indexLed <  71)	indexLed= 4;
+					else if(indexLed <  86)	indexLed= 5;
+					else if(indexLed < 100)	indexLed= 6;
+					else if(indexLed < 114)	indexLed= 7;
+					else if(indexLed < 128)	indexLed= 8;
+					else if(indexLed < 142)	indexLed= 9;
+					else if(indexLed < 156)	indexLed=10;
+					else if(indexLed < 171)	indexLed=11;
+					else if(indexLed < 185)	indexLed=12;
+					else if(indexLed < 199)	indexLed=13;
+					else if(indexLed < 213)	indexLed=14;
+					else if(indexLed < 227)	indexLed=15;
+					else if(indexLed < 241)	indexLed=16;
+					else					indexLed=17;
+					stripBright[indexLed] = brightness;
+					stripHue[indexLed] = hue;
+				}
 				/* Compute Ball animation */
+				posX = lowPassY.read() - lowPass2Y.run(accY);	// Hi-pass filter
+				posY = lowPassX.read() - lowPass2X.run(accX);
 				if(!g_cycleCounter){
 					if(posX >  63) posX =  63;
 					if(posX < -63) posX = -63;
@@ -186,7 +213,11 @@ int main(void)
 						if(distComp.split.MSB < PROXI_LIGHT_LEN){
 							uint8_t bright = proxiLight[distComp.split.MSB];
 							bright = ((uint16_t)(bright*brightness))>>7;
-							colorHSV(hue, 255, bright, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
+							if(bright > stripBright[i]){
+								//colorHSV(0, 255, bright, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
+								stripBright[i] = bright;
+								stripHue[i] = hue + 32768;
+							}
 						}else{
 							stripRed__[i] = 0;
 							stripGreen[i] = 0;
@@ -194,31 +225,6 @@ int main(void)
 						}
 					}
 				}
-				/* Compute Starlight animation */
-// 				if(g_animationCounter == ANIM_STARS_LEN){
-// 					g_animationCounter = 0;
-// 					indexLed = rando.run();
-// 					/* Faster and more precise than a division */
-// 					if     (indexLed <  15)			indexLed= 0;
-// 					else if(indexLed <  29)	indexLed= 1;
-// 					else if(indexLed <  43)	indexLed= 2;
-// 					else if(indexLed <  57)	indexLed= 3;
-// 					else if(indexLed <  71)	indexLed= 4;
-// 					else if(indexLed <  86)	indexLed= 5;
-// 					else if(indexLed < 100)	indexLed= 6;
-// 					else if(indexLed < 114)	indexLed= 7;
-// 					else if(indexLed < 128)	indexLed= 8;
-// 					else if(indexLed < 142)	indexLed= 9;
-// 					else if(indexLed < 156)	indexLed=10;
-// 					else if(indexLed < 171)	indexLed=11;
-// 					else if(indexLed < 185)	indexLed=12;
-// 					else if(indexLed < 199)	indexLed=13;
-// 					else if(indexLed < 213)	indexLed=14;
-// 					else if(indexLed < 227)	indexLed=15;
-// 					else if(indexLed < 241)	indexLed=16;
-// 					else					indexLed=17;
-// 					stripBright[indexLed] = brightness;
-// 				}
 				/* Compute Snake animation */
 // 				if(g_animationCounter == ANIM_SNAKE_LEN){
 // 					g_animationCounter = 0;
@@ -236,16 +242,16 @@ int main(void)
 // 					if(indexLed == 0) g_animationDir = 1;
 // 				}
 				/* Compute colors */
-// 				if(!g_cycleCounter){
-// 					for(i=0; i<STRIP_LEN; i++){
-// 						colorHSV(hue, 255, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
-// 						if(stripBright[i] > LED_FADE_SPEED){
-// 							stripBright[i]-=LED_FADE_SPEED;
-// 						}else{
-// 							stripBright[i]=0;
-// 						}
-// 					}
-// 				}
+				if(!g_cycleCounter){
+					for(i=0; i<STRIP_LEN; i++){
+						colorHSV(stripHue[i], 255, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
+						if(stripBright[i] > LED_FADE_SPEED){
+							stripBright[i]-=LED_FADE_SPEED;
+						}else{
+							stripBright[i]=0;
+						}
+					}
+				}
 				/* Send colors to Pixels */
 				if(brightness == 0 && !g_LedsOn){
 					g_sleepEngage ++;
