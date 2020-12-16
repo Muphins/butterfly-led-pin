@@ -25,6 +25,14 @@ union t16_t{	// used to get individual bytes of a 16-bit integer without bitshif
 	tSplit	 split;
 };
 
+enum tAnim{
+	AnimNone		= 0,
+	AnimSnake		= 1,
+	AnimWings		= 2,
+	AnimBallTilt	= 3,
+	AnimStarlight	= 4
+	};
+
 /*******************************************************************************
 *								  PROTOTYPES								   *
 *******************************************************************************/
@@ -54,10 +62,17 @@ inline int16_t sq(int16_t n){return n*n;}
 #define ANIM_SWIPE_LEN	2
 #define PROXI_LIGHT_LEN	16
 
+#define RIGHT_BOT_START_INDEX	0
+#define LEFT_BOT_START_INDEX	(RIGHT_BOT_START_INDEX+4)
+#define LEFT_TOP_START_INDEX	(LEFT_BOT_START_INDEX+4)
+#define RIGHT_TOP_START_INDEX	(LEFT_TOP_START_INDEX+5)
+
 /*******************************************************************************
 *								  VARIABLES									   *
 *******************************************************************************/
 
+/* General */
+bool g_firstBoot = true;
 /* Time base related */
 uint8_t g_cycleCounter=0;
 bool g_dataReady = false;
@@ -78,8 +93,8 @@ uint16_t stripHue[STRIP_LEN];
 /* LEDs positions */
 uint8_t leftBotToTop[9] =  { 6, 5, 7, 4, 9, 8,10,12,11};
 uint8_t rightBotToTop[9] = { 2, 1, 3, 0,14,13,15,17,16};
-int8_t ledXPos[18] = {22,49,35,22,-22,-49,-35,-22,-16,-38,-49,-50,-28, 16, 38, 49, 50, 28};
-int8_t ledYPos[18] = {19,25,55,36, 19, 25, 55, 36,-16,-14,-31,-50,-34,-16,-14,-31,-50,-34};
+int8_t ledXPos[STRIP_LEN] = { 22, 49, 35, 22,-22,-49,-35,-22,-16,-38,-49,-50,-28, 16, 38, 49, 50, 28};
+int8_t ledYPos[STRIP_LEN] = { 19, 25, 55, 36, 19, 25, 55, 36,-16,-14,-31,-50,-34,-16,-14,-31,-50,-34};
 
 /* Accelerometer data */
 static int8_t accX = 0;
@@ -103,7 +118,7 @@ cRng rando;	// random number generator
 uint8_t g_animationCounter=0;
 int8_t g_animationDir = 1;
 /* proxiLight: Look-up table for LED brightness to distance calculated using a²+b² */
-uint8_t proxiLight[16] = {128,113,98,85,72,61,50,41,32,25,18,13,8,5,2,1};
+uint8_t proxiLight[PROXI_LIGHT_LEN] = {128,113,98,85,72,61,50,41,32,25,18,13,8,5,2,1};
 /*******************************************************************************
 *                                    CODE                                      *
 *******************************************************************************/
@@ -130,6 +145,11 @@ int main(void)
 	
     while (1) 
     {
+		/* generates random numbers outside of the main program,
+		   allowing the non-predictability of the numbers generated inside the main part
+		   since its duration depends on the acceleration which depend on external events */
+		rando.run();
+		
 		if(!g_eco && !g_sleepCoolDown){
 			static uint8_t sumAxes = 0;
 			static uint16_t hue = 0;
@@ -147,7 +167,7 @@ int main(void)
 				g_dataReady = false;
 				accel::getAcc(&accX, &accY, &accZ);
 				
-				/* filter acceleration data */
+				/* low-pass-filter acceleration data */
  				filteredX = abs(accX - lowPassX.run(accX));
  				filteredY = abs(accY - lowPassY.run(accY));
  				filteredZ = abs(accZ - lowPassZ.run(accZ));
@@ -163,61 +183,100 @@ int main(void)
 				}
 				
 				/* Compute Starlight animation */
-				if(g_animationCounter == ANIM_STARS_LEN){
-					g_animationCounter = 0;
-					indexLed = rando.run();
-					/* Faster and more precise than a division */
-					/* Maps 18 LEDs to a random range(0;255) */
-					if     (indexLed <  15)	indexLed= 0;
-					else if(indexLed <  29)	indexLed= 1;
-					else if(indexLed <  43)	indexLed= 2;
-					else if(indexLed <  57)	indexLed= 3;
-					else if(indexLed <  71)	indexLed= 4;
-					else if(indexLed <  86)	indexLed= 5;
-					else if(indexLed < 100)	indexLed= 6;
-					else if(indexLed < 114)	indexLed= 7;
-					else if(indexLed < 128)	indexLed= 8;
-					else if(indexLed < 142)	indexLed= 9;
-					else if(indexLed < 156)	indexLed=10;
-					else if(indexLed < 171)	indexLed=11;
-					else if(indexLed < 185)	indexLed=12;
-					else if(indexLed < 199)	indexLed=13;
-					else if(indexLed < 213)	indexLed=14;
-					else if(indexLed < 227)	indexLed=15;
-					else if(indexLed < 241)	indexLed=16;
-					else					indexLed=17;
-					stripBright[indexLed] = brightness;
-					stripHue[indexLed] = hue;
+// 				if(g_animationCounter == ANIM_STARS_LEN){
+// 					g_animationCounter = 0;
+// 					indexLed = rando.run();
+// 					/* Faster and more precise than a division */
+// 					/* Maps 18 LEDs to a random range(0;255) */
+// 					if     (indexLed <  15)	indexLed= 0;
+// 					else if(indexLed <  29)	indexLed= 1;
+// 					else if(indexLed <  43)	indexLed= 2;
+// 					else if(indexLed <  57)	indexLed= 3;
+// 					else if(indexLed <  71)	indexLed= 4;
+// 					else if(indexLed <  86)	indexLed= 5;
+// 					else if(indexLed < 100)	indexLed= 6;
+// 					else if(indexLed < 114)	indexLed= 7;
+// 					else if(indexLed < 128)	indexLed= 8;
+// 					else if(indexLed < 142)	indexLed= 9;
+// 					else if(indexLed < 156)	indexLed=10;
+// 					else if(indexLed < 171)	indexLed=11;
+// 					else if(indexLed < 185)	indexLed=12;
+// 					else if(indexLed < 199)	indexLed=13;
+// 					else if(indexLed < 213)	indexLed=14;
+// 					else if(indexLed < 227)	indexLed=15;
+// 					else if(indexLed < 241)	indexLed=16;
+// 					else					indexLed=17;
+// 					stripBright[indexLed] = brightness;
+// 					stripHue[indexLed] = hue;
+// 				}
+				
+				/* Compute Wings animation */
+				posX = lowPassY.read() - lowPass2Y.run(accY);	// Band-pass filter
+				posY = lowPassX.read() - lowPass2X.run(accX);
+				uint8_t saturation = 255;
+				if(!g_cycleCounter && g_LedsOn){
+					int16_t hueXShift = ((int16_t)posX)<<8;
+					int16_t hueYShift = ((int16_t)posY)<<8;
+					uint8_t bright = abs(posX) + abs(posY);
+					//bright = bright<<1;
+					saturation -= bright;
+					if(brightness > 0){
+						if(bright < (255 - (brightness>>1))){
+							bright += (brightness>>1);
+						}else{
+							bright = 255;
+						}
+					}else{
+						bright = 0;
+					}
+					uint16_t wingHue = hue + hueXShift + hueYShift;	// Bot Right
+					for(i=RIGHT_BOT_START_INDEX;i<LEFT_BOT_START_INDEX; i++){
+						stripBright[i] = bright;
+						stripHue[i] = wingHue;
+					}
+					wingHue = hue - hueXShift + hueYShift;	// Bot Left
+					for(;i<LEFT_TOP_START_INDEX; i++){
+						stripBright[i] = bright;
+						stripHue[i] = wingHue;
+					}
+					wingHue = hue - hueXShift - hueYShift;	// Top Left
+					for(;i<RIGHT_TOP_START_INDEX; i++){
+						stripBright[i] = bright;
+						stripHue[i] = wingHue;
+					}
+					wingHue = hue + hueXShift - hueYShift;	// Top Right
+					for(;i<STRIP_LEN; i++){
+						stripBright[i] = bright;
+						stripHue[i] = wingHue;
+					}
 				}
 				
 				/* Compute Ball-tilt animation */
-				posX = lowPassY.read() - lowPass2Y.run(accY);	// Hi-pass filter
-				posY = lowPassX.read() - lowPass2X.run(accX);
-				if(!g_cycleCounter){
-					if(posX >  63) posX =  63;	// Set limits for X,Y accel position
-					if(posX < -63) posX = -63;
-					if(posY >  63) posY =  63;
-					if(posY < -63) posY = -63;
-					for(i=0; i<STRIP_LEN; i++){
-						uint8_t x = abs(posX - ledXPos[i]);	// Relative position of LED to acceleration
-						uint8_t y = abs(posY - ledYPos[i]);
-						t16_t distComp;
-						distComp.value = ((x*x)+(y*y))<<1;	// Pythagore (+ left shift for more precision)
-						if(distComp.split.MSB < PROXI_LIGHT_LEN){
-							uint8_t bright = proxiLight[distComp.split.MSB];	// indexing to "proxiLight" is more precise (there is more values) thanks to the left-shift
-							bright = ((uint16_t)(bright*brightness))>>7;		// Scale LED brightness to global brightness
-							if(bright > stripBright[i]){						// Only affects less bright LEDs
-								//colorHSV(0, 255, bright, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
-								stripBright[i] = bright;
-								stripHue[i] = hue + 32768;
-							}
-						}/*else{
-							stripRed__[i] = 0;
-							stripGreen[i] = 0;
-							stripBlue_[i] = 0;
-						}*/
-					}
-				}
+// 				if(!g_cycleCounter){
+// 					if(posX >  63) posX =  63;	// Set limits for X,Y accel position
+// 					if(posX < -63) posX = -63;
+// 					if(posY >  63) posY =  63;
+// 					if(posY < -63) posY = -63;
+// 					for(i=0; i<STRIP_LEN; i++){
+// 						uint8_t x = abs(posX - ledXPos[i]);	// Relative position of LED to acceleration
+// 						uint8_t y = abs(posY - ledYPos[i]);
+// 						t16_t distComp;
+// 						distComp.value = ((x*x)+(y*y))<<1;	// Pythagorean formula (+ left shift for more precision)
+// 						if(distComp.split.MSB < PROXI_LIGHT_LEN){
+// 							uint8_t bright = proxiLight[distComp.split.MSB];	// indexing to "proxiLight" is more precise (there is more values) thanks to the left-shift
+// 							bright = ((uint16_t)(bright*brightness))>>7;		// Scale LED brightness to global brightness
+// 							if(bright > stripBright[i]){						// Only affects less bright LEDs
+// 								//colorHSV(0, 255, bright, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
+// 								stripBright[i] = bright;
+// 								stripHue[i] = hue + 32768;
+// 							}
+// 						}/*else{
+// 							stripRed__[i] = 0;
+// 							stripGreen[i] = 0;
+// 							stripBlue_[i] = 0;
+// 						}*/
+// 					}
+//				}
 				/* Compute Snake animation */
 // 				if(g_animationCounter == ANIM_SNAKE_LEN){
 // 					g_animationCounter = 0;
@@ -237,12 +296,12 @@ int main(void)
 				/* Compute colors */
 				if(!g_cycleCounter){
 					for(i=0; i<STRIP_LEN; i++){
-						colorHSV(stripHue[i], 255, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
-						if(stripBright[i] > LED_FADE_SPEED){
-							stripBright[i]-=LED_FADE_SPEED;
-						}else{
-							stripBright[i]=0;
-						}
+						colorHSV(stripHue[i], saturation, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
+// 						if(stripBright[i] > LED_FADE_SPEED){
+// 							stripBright[i]-=LED_FADE_SPEED;
+// 						}else{
+// 							stripBright[i]=0;
+// 						}
 					}
 				}
 				/* Send colors to Pixels */
@@ -262,7 +321,8 @@ int main(void)
 			}
 		}
 		/* Sleep management */
-		if(g_sleepEngage == 255 || g_eco){
+		if(g_sleepEngage == 255 || g_eco || g_firstBoot){
+			g_firstBoot = false;
 			if(!g_eco){
 				g_eco = true;
 				g_sleepCoolDown = true;
