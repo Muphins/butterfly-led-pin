@@ -62,9 +62,9 @@ inline int16_t sq(int16_t n){return n*n;}
 
 /* Animation activation */
 #define ANIM_STARLIGHT
-//#define ANIM_BALLTILT
+#define ANIM_BALLTILT
 #define BALL_TIL_HIPASS
-#define ANIM_STATIC_FRENCHFLAG
+//#define ANIM_STATIC_FRENCHFLAG
 
 /* Animations Duration */
 #define CYCLE_LENGTH		4	// 25Hz with Data-rate of 100Hz
@@ -112,8 +112,8 @@ bool g_sleepCoolDown = false;
 uint8_t g_sleepEngage = 0;
 
 /* LEDs positions */
-int8_t ledXPos[STRIP_LEN] = { 22, 49, 35, 22,-22,-49,-35,-22,-16,-38,-49,-50,-28, 16, 38, 49, 50, 28};
-int8_t ledYPos[STRIP_LEN] = { 19, 25, 55, 36, 19, 25, 55, 36,-16,-14,-31,-50,-34,-16,-14,-31,-50,-34};
+const int8_t ledXPos[STRIP_LEN] PROGMEM = { 22, 49, 35, 22,-22,-49,-35,-22,-16,-38,-49,-50,-28, 16, 38, 49, 50, 28};
+const int8_t ledYPos[STRIP_LEN] PROGMEM = { 19, 25, 55, 36, 19, 25, 55, 36,-16,-14,-31,-50,-34,-16,-14,-31,-50,-34};
 
 /* Accelerometer data */
 static int8_t accX = 0;
@@ -150,7 +150,7 @@ uint16_t hueBall;
 int16_t hueXShift;
 int16_t hueYShift;
 /* proxiLight: Look-up table for LED brightness to distance calculated using a²+b² */
-uint8_t proxiLight[PROXI_LIGHT_LEN] = {128,113,98,85,72,61,50,41,32,25,18,13,8,5,2,1};
+const uint8_t proxiLight[PROXI_LIGHT_LEN] PROGMEM = {128,113,98,85,72,61,50,41,32,25,18,13,8,5,2,1};
 /* LED strip related */
 bool g_LedsOn = true;
 uint8_t stripRed__[STRIP_LEN];
@@ -364,17 +364,16 @@ void computeAnimations(uint8_t startIndex, uint8_t endIndex)
 		}
 #ifdef ANIM_BALLTILT
 		// Ball-Tilt animation
-		x = abs(posX - ledXPos[i]);	// Relative position of LED to acceleration
-		y = abs(posY - ledYPos[i]);
+		x = abs(posX - pgm_read_byte(&ledXPos[i]));	// Relative position of LED to acceleration
+		y = abs(posY - pgm_read_byte(&ledYPos[i]));
 		distComp.value = ((x*x)+(y*y))<<1;	// Pythagorean formula (+ left shift for more precision)
 		if(distComp.split.MSB < PROXI_LIGHT_LEN){
-			uint8_t bright = proxiLight[distComp.split.MSB];				// indexing to "proxiLight" is more precise (there is more values) thanks to the left-shift
+			uint8_t bright = pgm_read_byte(&proxiLight[distComp.split.MSB]);				// indexing to "proxiLight" is more precise (there is more values) thanks to the left-shift
 			bright = ((uint16_t)(bright*brightness))>>7;					// Scale LED brightness to global brightness
 			if(bright > stripBright[i] || stripAnim[i] <= AnimBallTilt){	// Handles superposition of animations
 				stripAnim[i] = AnimBallTilt;
-				colorHSV(hueBall, /*SATURATION_DEFAULT*/0, bright, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
+				colorHSV(hueBall, SATURATION_DEFAULT, bright, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
 				stripBright[i] = bright;
-				stripHue[i] = hueBall;
 			}
 		}
 #endif // ANIM_BALLTILT
@@ -383,9 +382,10 @@ void computeAnimations(uint8_t startIndex, uint8_t endIndex)
 		// Display french flag
 		if(stripAnim[i] <= AnimStatic){
 			stripAnim[i] = AnimStatic;
-			if(ledXPos[i] < -22){
+			int8_t tmpLedX = pgm_read_byte(&ledXPos[i]);
+			if(tmpLedX < -22){
 				colorHSV(HUE_BLUE, SATURATION_DEFAULT, brightness, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
-			}else if(ledXPos[i] < 28){
+			}else if(tmpLedX < 28){
 				colorHSV(0, 0, brightness, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
 			}else{
 				colorHSV(HUE_RED, SATURATION_DEFAULT, brightness, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
