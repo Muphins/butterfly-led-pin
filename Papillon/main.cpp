@@ -87,6 +87,8 @@ inline int16_t sq(int16_t n){return n*n;}
 #define LEFT_BOT_START_INDEX	(RIGHT_BOT_START_INDEX+4)
 #define LEFT_TOP_START_INDEX	(LEFT_BOT_START_INDEX+4)
 #define RIGHT_TOP_START_INDEX	(LEFT_TOP_START_INDEX+5)
+/* Starlight LED count */
+#define STARLIGHT_LED_COUNT	5
 
 #define SATURATION_DEFAULT		255
 #define SATURATION_SATRLIGHT	128
@@ -135,7 +137,10 @@ uint8_t filteredZ = 0;
 /* LED animation related */
 uint16_t hue = 0;
 uint8_t brightness = 0;
+// For starlight animation
 cRng rando;	// random number generator
+uint16_t starlightHue[STARLIGHT_LED_COUNT];
+uint8_t startlightHueIndex = 0;
 // For Ball-tilt animation
 uint8_t x;			// relative ball to LED x-distance
 uint8_t y;			// relative ball to LED y-distance
@@ -153,7 +158,6 @@ uint8_t stripGreen[STRIP_LEN];
 uint8_t stripBlue_[STRIP_LEN];
 uint8_t stripBright[STRIP_LEN];
 tAnim stripAnim[STRIP_LEN];
-uint16_t stripHue[STRIP_LEN];
 
 /*******************************************************************************
 *                                    CODE                                      *
@@ -263,8 +267,11 @@ int main(void)
  						else if(indexLed < 241)	indexLed=16;
  						else					indexLed=17;
  						stripBright[indexLed] = brightness;
- 						stripHue[indexLed] = hue;
-						stripAnim[indexLed] = AnimStarlight;
+ 						starlightHue[startlightHueIndex] = hue;
+						stripAnim[indexLed] = (tAnim)((uint8_t)AnimStarlight + startlightHueIndex);
+						
+						startlightHueIndex++;
+						if(startlightHueIndex == STARLIGHT_LED_COUNT) startlightHueIndex = 0;
  					}
 #endif
 #if defined(ANIM_BALLTILT) || defined(ANIM_STATIC_FRENCHFLAG)
@@ -391,11 +398,12 @@ void computeAnimations(uint8_t startIndex, uint8_t endIndex)
 			stripGreen[i] = 0;
 			stripBlue_[i] = 0;
 		// Render Starlight LEDs
-		}else if(stripAnim[i] == AnimStarlight){
-			colorHSV(stripHue[i], SATURATION_SATRLIGHT, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
+		}else if(stripAnim[i] >= AnimStarlight){
+			uint8_t starIndex = stripAnim[i] - AnimStarlight;
+			colorHSV(starlightHue[starIndex], SATURATION_SATRLIGHT, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
 			if(stripBright[i] > LED_FADE_SPEED){
 				stripBright[i]-=LED_FADE_SPEED;
-				}else{
+			}else{
 				stripBright[i]=0;
 				stripAnim[i] = AnimNone;
 			}
