@@ -18,7 +18,7 @@ class cRngStrong{
 	uint8_t m_counter;
   public:
 	cRngStrong(uint8_t seed=6):m_coef(1),m_counter(0){m_seed=seed<<2|1;};
-	/* Generates 64 sequences of 256 different numbers. resulting in 16384 different chains of two numbers */
+	/* Generates 64 sequences of 256 different numbers. resulting in 16384 different successions of two numbers */
 	uint8_t run(void){m_seed = m_seed * m_coef + COEF_INCR;m_counter++;if(!m_counter)m_coef+=4;return m_seed;};	// 28 cycles
 };
 

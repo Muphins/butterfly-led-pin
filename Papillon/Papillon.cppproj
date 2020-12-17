@@ -183,12 +183,6 @@
     <Compile Include="i2cSoft.h">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="ledWings.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="ledWings.h">
-      <SubType>compile</SubType>
-    </Compile>
     <Compile Include="main.cpp">
       <SubType>compile</SubType>
     </Compile>
