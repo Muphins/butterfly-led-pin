@@ -59,19 +59,19 @@ inline int16_t sq(int16_t n){return n*n;}
 #define ACTIVATION_THRESHOLD	3
 #define LOWPASS1_RATIO			3
 #define LOWPASS2_RATIO			100
+#define HALF_G					63
 
 /* Animation activation */
 #define ANIM_STARLIGHT
-#define ANIM_BALLTILT
-#define BALL_TIL_HIPASS
+//#define ANIM_BALLTILT
+//#define BALL_TILT_HIPASS
 //#define ANIM_STATIC_FRENCHFLAG
+#define ANIM_WINGS
 
 /* Animations Duration */
 #define CYCLE_LENGTH		4	// 25Hz with Data-rate of 100Hz
-#define LED_FADE_SPEED		4
+#define LED_FADE_SPEED		3
 #define ANIM_STARLIGHT_LEN	13
-#define ANIM_SNAKE_LEN		1
-#define ANIM_SWIPE_LEN		2
 
 /* Calculation subsets' start cycle */
 #define SUBSET0_CYCLE	0
@@ -88,10 +88,12 @@ inline int16_t sq(int16_t n){return n*n;}
 #define LEFT_TOP_START_INDEX	(LEFT_BOT_START_INDEX+4)
 #define RIGHT_TOP_START_INDEX	(LEFT_TOP_START_INDEX+5)
 /* Starlight LED count */
-#define STARLIGHT_LED_COUNT	5
+#define STARLIGHT_LED_COUNT	10
 
 #define SATURATION_DEFAULT		255
-#define SATURATION_SATRLIGHT	128
+#define SATURATION_SATRLIGHT	192
+#define BRIGHTNESS_DEFAULT		128
+#define BRIGHTNESS_STARLIGHT	255
 
 #define HUE_RED		0
 #define HUE_BLUE	(43520)
@@ -121,7 +123,8 @@ static int8_t accY = 0;
 static int8_t accZ = 0;
 uint8_t g_accelIntSource = 0;	// Interrupt source of accelerometer
 uint8_t sumAxes = 0;
-int8_t posX, posY;	// X,Y position of the acceleration data
+int8_t posXHiPass, posYHiPass;	// X,Y hi-pass filtered position of the acceleration data
+int8_t posXSmooth, posYSmooth;	// X,Y position of the smoothed acceleration data
 
 /* Filters */
 cLPF lowPassX(3);		// low-freq low-pass
@@ -149,6 +152,11 @@ uint16_t hueBall;
 // For wings animation
 int16_t hueXShift;
 int16_t hueYShift;
+uint16_t hueWing;
+uint8_t wingBright;
+uint8_t wingRed;
+uint8_t wingGreen;
+uint8_t wingBlue;
 /* proxiLight: Look-up table for LED brightness to distance calculated using a²+b² */
 const uint8_t proxiLight[PROXI_LIGHT_LEN] PROGMEM = {128,113,98,85,72,61,50,41,32,25,18,13,8,5,2,1};
 /* LED strip related */
@@ -184,7 +192,7 @@ int main(void)
 	
     while (1)
     {
-		/* generates random numbers outside of the main program,
+		/* generates random numbers outside of the main loop,
 		   allowing the non-predictability of the numbers generated inside the main part
 		   since its duration depends on the acceleration which depend on external events */
 		rando.run();
@@ -214,7 +222,7 @@ int main(void)
 				/* compute activation/Sleep threshold and global brightness */
 				sumAxes = filteredX + filteredY + filteredZ;
 				if(sumAxes > ACTIVATION_THRESHOLD){
-					if(!g_cycleCounter && brightness < 128) brightness ++;
+					if(!g_cycleCounter && brightness < BRIGHTNESS_DEFAULT) brightness ++;
 				}else{
 					if(!g_cycleCounter && brightness > 0) brightness --;
 				}
@@ -222,23 +230,20 @@ int main(void)
 				/* Compute animations and send colors to LEDs */
 				/**********************************************/
 				hue += 32;
-				/* divide the calculations in 4 subset to spread the time spent 
+				/* divide the calculations in 4 subsets to spread the time spent 
 				   on it and allow future lengthening of the LED string. Those
 				   subsets are run when g_cycleCounter has the corresponding
 				   value */
 				if(g_cycleCounter == SUBSET0_CYCLE){
 				//============================	/* Compute animation's next cycle */
 					/* Band-pass filters X,Y acceleration data */
-#ifdef BALL_TIL_HIPASS
-					posX = lowPassX.read() - lowPass2X.run(accX);
-					posY = lowPassY.read() - lowPass2Y.run(accY);
-#else
-					posX = -lowPass2X.read();
-					posY = -lowPass2Y.read();
-#endif
+					posXHiPass = lowPassX.read() - lowPass2X.read();
+					posYHiPass = lowPassY.read() - lowPass2Y.read();
+					posXSmooth = -lowPass2X.read();
+					posYSmooth = -lowPass2Y.read();
 					// Hue-shift calculated before posX,Y have been clipped
-					hueXShift = ((int16_t)posX)<<8;	// Hue-shift depending of hi-pass filtered X-axis acceleration
-					hueYShift = ((int16_t)posY)<<8;	// Hue-shift depending of hi-pass filtered Y-axis acceleration
+					hueXShift = ((int16_t)posXHiPass)<<8;	// Hue-shift depending of hi-pass filtered X-axis acceleration
+					hueYShift = ((int16_t)posYHiPass)<<8;	// Hue-shift depending of hi-pass filtered Y-axis acceleration
 #ifdef ANIM_STARLIGHT
 					/* Compute Starlight animation */
 					static uint8_t animCounterStarlight = 0;
@@ -266,7 +271,7 @@ int main(void)
  						else if(indexLed < 227)	indexLed=15;
  						else if(indexLed < 241)	indexLed=16;
  						else					indexLed=17;
- 						stripBright[indexLed] = brightness;
+ 						stripBright[indexLed] = (uint16_t)(BRIGHTNESS_STARLIGHT * brightness) >> 7;
  						starlightHue[startlightHueIndex] = hue;
 						stripAnim[indexLed] = (tAnim)((uint8_t)AnimStarlight + startlightHueIndex);
 						
@@ -274,28 +279,35 @@ int main(void)
 						if(startlightHueIndex == STARLIGHT_LED_COUNT) startlightHueIndex = 0;
  					}
 #endif
+#if defined(ANIM_WINGS)
+					wingBright = (brightness >> 3) + abs(posYHiPass) + abs(posYHiPass);
+#endif
 #if defined(ANIM_BALLTILT) || defined(ANIM_STATIC_FRENCHFLAG)
-					if(posX >  63) posX =  63;	// Set limits for X,Y accel position
-					if(posX < -63) posX = -63;
-					if(posY >  63) posY =  63;
-					if(posY < -63) posY = -63;
+					if(posXHiPass >  HALF_G) posXHiPass =  HALF_G;	// Set limits for X,Y accel position
+					if(posXHiPass < -HALF_G) posXHiPass = -HALF_G;
+					if(posYHiPass >  HALF_G) posYHiPass =  HALF_G;
+					if(posYHiPass < -HALF_G) posYHiPass = -HALF_G;
 					hueBall = hue + 32768;
 #endif
 				/* Calculation subsets start here */
 				//============================	/* Compute Bottom-Right wing (LEDs[0..3]) */
-					computeAnimations(0, RIGHT_BOT_START_INDEX);
+					hueWing = hue + hueXShift + hueYShift + 32768;
+					computeAnimations(RIGHT_BOT_START_INDEX, LEFT_BOT_START_INDEX);
 						
 				}else if(g_cycleCounter == SUBSET1_CYCLE){
 				//============================	/* Compute Bottom-Left wing (LEDs[4..7]) */
-					computeAnimations(RIGHT_BOT_START_INDEX, LEFT_BOT_START_INDEX);
+					hueWing = hue - hueXShift + hueYShift + 32768;
+					computeAnimations(LEFT_BOT_START_INDEX, LEFT_TOP_START_INDEX);
 					
 				}else if(g_cycleCounter == SUBSET2_CYCLE){
 				//============================	/* Compute Top-Left wing (LEDs[8..12]) */
-					computeAnimations(LEFT_BOT_START_INDEX, LEFT_TOP_START_INDEX);
+					hueWing = hue - hueXShift - hueYShift + 32768;
+					computeAnimations(LEFT_TOP_START_INDEX, RIGHT_TOP_START_INDEX);
 					
 				}else if(g_cycleCounter == SUBSET3_CYCLE){
 				//============================	/* Compute Top-Right wing (LEDs[13..17]) */
-					computeAnimations(LEFT_TOP_START_INDEX, STRIP_LEN);
+					hueWing = hue + hueXShift - hueYShift + 32768;
+					computeAnimations(RIGHT_TOP_START_INDEX, STRIP_LEN);
 					
 				//============================	/* Send pixels */
 					if(brightness == 0 && !g_LedsOn){
@@ -358,14 +370,24 @@ int main(void)
 void computeAnimations(uint8_t startIndex, uint8_t endIndex)
 {
 	uint8_t& i = startIndex;
+	
+#if defined(ANIM_WINGS)
+	colorHSV(hueWing, SATURATION_DEFAULT, wingBright, &wingRed, &wingGreen, &wingBlue);
+#endif // ANIM_WINGS
+
 	for(; i<endIndex; i++){
 		if(stripAnim[i] < AnimStarlight){
 			stripAnim[i] = AnimNone;
 		}
 #ifdef ANIM_BALLTILT
 		// Ball-Tilt animation
-		x = abs(posX - pgm_read_byte(&ledXPos[i]));	// Relative position of LED to acceleration
-		y = abs(posY - pgm_read_byte(&ledYPos[i]));
+//#if defined(BALL_TILT_HIPASS)
+ 		x = abs(posXHiPass - (int8_t)pgm_read_byte(&ledXPos[i]));	// Relative position of LED to acceleration
+ 		y = abs(posYHiPass - (int8_t)pgm_read_byte(&ledYPos[i]));
+//#else
+//		x = abs(posXSmooth - (int8_t)pgm_read_byte(&ledXPos[i]));	// Relative position of LED to acceleration
+//		y = abs(posYSmooth - (int8_t)pgm_read_byte(&ledYPos[i]));
+//#endif // BALL_TILT_HIPASS
 		distComp.value = ((x*x)+(y*y))<<1;	// Pythagorean formula (+ left shift for more precision)
 		if(distComp.split.MSB < PROXI_LIGHT_LEN){
 			uint8_t bright = pgm_read_byte(&proxiLight[distComp.split.MSB]);				// indexing to "proxiLight" is more precise (there is more values) thanks to the left-shift
@@ -382,7 +404,7 @@ void computeAnimations(uint8_t startIndex, uint8_t endIndex)
 		// Display french flag
 		if(stripAnim[i] <= AnimStatic){
 			stripAnim[i] = AnimStatic;
-			int8_t tmpLedX = pgm_read_byte(&ledXPos[i]);
+			int8_t tmpLedX = (int8_t)pgm_read_byte(&ledXPos[i]);
 			if(tmpLedX < -22){
 				colorHSV(HUE_BLUE, SATURATION_DEFAULT, brightness, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
 			}else if(tmpLedX < 28){
@@ -392,6 +414,16 @@ void computeAnimations(uint8_t startIndex, uint8_t endIndex)
 			}
 		}
 #endif // ANIM_STATIC_FRENCHFLAG
+#if defined(ANIM_WINGS)
+		// Display colored wing
+		if(stripAnim[i] <= AnimWings){
+			stripAnim[i] = AnimWings;
+			stripRed__[i] = wingRed;
+			stripGreen[i] = wingGreen;
+			stripBlue_[i] = wingBlue;
+			stripBright[i] = wingBright;
+		}
+#endif // ANIM_WINGS
 		// Set color to unused LEDs
 		if(stripAnim[i] == AnimNone){
 			stripRed__[i] = 0;
