@@ -9,9 +9,70 @@
 #include <avr/pgmspace.h>
 
 #include "MMA8453.h"
-#include "timers.h"
 #include "filters.h"
 #include "rng.h"
+/*******************************************************************************
+*								  PROTOTYPES								   *
+*******************************************************************************/
+void computeAnimations(uint8_t startIndex, uint8_t endIndex);
+void colorHSV(uint16_t hue, uint8_t sat, uint8_t val, uint8_t* r, uint8_t* g, uint8_t* b);
+inline uint8_t cumul(uint8_t value, uint8_t plus);
+void neoPixelSendPixel(uint8_t b);
+inline int16_t sq(int16_t n){return n*n;}
+/*******************************************************************************
+*								  CONSTANTS									   *
+*******************************************************************************/
+/* LEDs PORT PINS */
+#define LED_POWER	(1<<PB3)
+#define LED_CMD		(1<<PB4)
+/* Accelerometer filters ratios and activation threshold */
+#define ACTIVATION_THRESHOLD	3
+#define LOWPASS1_RATIO			3
+#define LOWPASS2_RATIO			100
+#define HALF_G					63
+
+/* Animation activation */
+#define ANIM_STARLIGHT
+//#define ANIM_BALLTILT
+//#define BALL_TILT_HIPASS
+//#define ANIM_STATIC_FRENCHFLAG
+#define ANIM_WINGS
+
+/* Animations Duration */
+#define CYCLE_LENGTH		4	// 25Hz with Data-rate of 100Hz
+#define LED_FADE_SPEED		3	// The amount of starlight's brightness decrease every cycle
+#define ANIM_STARLIGHT_LEN	13	// The animation triggers every ANIM_STARLIGHT_LEN full cycles
+
+/* Calculation subsets' start cycle */
+/* Subsets are spaced to allow for the maximum time between two calculations */
+#define SUBSET0_CYCLE	0
+#define SUBSET1_CYCLE	1
+#define SUBSET2_CYCLE	2
+#define SUBSET3_CYCLE	3
+
+/* LED strip tables length */
+#define STRIP_LEN		18
+#define PROXI_LIGHT_LEN	16
+/* Wings' LEDs subsets */
+#define RIGHT_BOT_START_INDEX	0
+#define LEFT_BOT_START_INDEX	(RIGHT_BOT_START_INDEX+4)
+#define LEFT_TOP_START_INDEX	(LEFT_BOT_START_INDEX+4)
+#define RIGHT_TOP_START_INDEX	(LEFT_TOP_START_INDEX+5)
+/* Starlight LED count */
+#define STARLIGHT_LED_COUNT	10	// MUST be <= (255 - AnimStarlight)
+
+#define SATURATION_DEFAULT		255
+#define SATURATION_SATRLIGHT	192
+#define BRIGHTNESS_DEFAULT		128
+#define BRIGHTNESS_STARLIGHT	255
+
+#define HUE_RED		0			//   0° * 65536 / 360
+#define HUE_YELLOW	10923		//  60°
+#define HUE_GREEN	21845		// 120°
+#define HUE_CYAN	32768		// 180°
+#define HUE_BLUE	43691		// 240°
+#define HUE_MAGENTA	54613		// 300°
+
 /*******************************************************************************
 *								  TYPEDEFS									   *
 *******************************************************************************/
@@ -32,77 +93,14 @@ enum tAnim{
 	AnimWings		= 3,
 	AnimBallTilt	= 4,
 	AnimStarlight	= 5
-	};
-
-/*******************************************************************************
-*								  PROTOTYPES								   *
-*******************************************************************************/
-void computeAnimations(uint8_t startIndex, uint8_t endIndex);
-void colorHSV(uint16_t hue, uint8_t sat, uint8_t val, uint8_t* r, uint8_t* g, uint8_t* b);
-inline uint8_t cumul(uint8_t value, uint8_t plus);
-void neoPixelSendPixel(uint8_t b);
-inline int16_t sq(int16_t n){return n*n;}
-/*******************************************************************************
-*								  CONSTANTS									   *
-*******************************************************************************/
-// const uint8_t sine[128] PROGMEM = {
-// 		0,  0,  1,  1,  2,  4,  6,  8, 10, 12, 15, 18, 22, 25, 29, 34,
-// 		38, 42, 47, 52, 57, 63, 68, 74, 80, 86, 92, 98,104,110,116,123,
-// 		129,135,142,148,154,160,166,172,178,184,189,195,200,205,210,215,
-// 		219,224,228,231,235,238,241,244,246,248,250,252,253,254,255,255,
-// 		255,255,254,253,252,250,248,246,244,241,238,235,231,228,224,219,
-// 		215,210,205,200,195,189,184,178,172,166,160,154,148,142,135,129,
-// 		123,116,110,104, 98, 92, 86, 80, 74, 68, 63, 57, 52, 47, 42, 38,
-// 		34, 29, 25, 22, 18, 15, 12, 10,  8,  6,  4,  2,  1,  1,  0,  0};
-
-/* Accelerometer filters ratios and activation threshold */
-#define ACTIVATION_THRESHOLD	3
-#define LOWPASS1_RATIO			3
-#define LOWPASS2_RATIO			100
-#define HALF_G					63
-
-/* Animation activation */
-#define ANIM_STARLIGHT
-//#define ANIM_BALLTILT
-//#define BALL_TILT_HIPASS
-//#define ANIM_STATIC_FRENCHFLAG
-#define ANIM_WINGS
-
-/* Animations Duration */
-#define CYCLE_LENGTH		4	// 25Hz with Data-rate of 100Hz
-#define LED_FADE_SPEED		3
-#define ANIM_STARLIGHT_LEN	13
-
-/* Calculation subsets' start cycle */
-#define SUBSET0_CYCLE	0
-#define SUBSET1_CYCLE	1
-#define SUBSET2_CYCLE	2
-#define SUBSET3_CYCLE	3
-
-/* LED strip tables length */
-#define STRIP_LEN		18
-#define PROXI_LIGHT_LEN	16
-/* Wings' LEDs subsets */
-#define RIGHT_BOT_START_INDEX	0
-#define LEFT_BOT_START_INDEX	(RIGHT_BOT_START_INDEX+4)
-#define LEFT_TOP_START_INDEX	(LEFT_BOT_START_INDEX+4)
-#define RIGHT_TOP_START_INDEX	(LEFT_TOP_START_INDEX+5)
-/* Starlight LED count */
-#define STARLIGHT_LED_COUNT	10
-
-#define SATURATION_DEFAULT		255
-#define SATURATION_SATRLIGHT	192
-#define BRIGHTNESS_DEFAULT		128
-#define BRIGHTNESS_STARLIGHT	255
-
-#define HUE_RED		0
-#define HUE_BLUE	(43520)
+};
 
 /*******************************************************************************
 *								  VARIABLES									   *
 *******************************************************************************/
 
 /* General */
+uint8_t i;
 bool g_firstBoot = true;
 /* Time base related */
 uint8_t g_cycleCounter=0;
@@ -142,13 +140,14 @@ uint16_t hue = 0;
 uint8_t brightness = 0;
 // For starlight animation
 cRng rando;	// random number generator
-uint16_t starlightHue[STARLIGHT_LED_COUNT];
+uint8_t starlightLedIndex=0;
+uint16_t starlightHue[STARLIGHT_LED_COUNT];	// Stores the hue for the currently active starlight LEDs
 uint8_t startlightHueIndex = 0;
 // For Ball-tilt animation
-uint8_t x;			// relative ball to LED x-distance
-uint8_t y;			// relative ball to LED y-distance
-t16_t distComp;		// relative ball to LED vector length
-uint16_t hueBall;
+uint8_t xBall;		// relative ball-to-LED x-distance
+uint8_t yBall;		// relative ball-to-LED y-distance
+t16_t distComp;		// relative ball-to-LED vector length
+uint16_t hueBall;	// Hue for the ball-tilt animation
 // For wings animation
 int16_t hueXShift;
 int16_t hueYShift;
@@ -172,16 +171,14 @@ tAnim stripAnim[STRIP_LEN];
 *******************************************************************************/
 int main(void)
 {
-	uint8_t i;
-	uint8_t indexLed=0;
 	/* Setup AVR */
 	ACSR |= (1<<ACD);	// disable analog comparator
 	PRR = 1<<PRTIM1 | 1<<PRTIM0 | 1<<PRUSI | 1<<PRADC;	// disable peripherals
 	
 	MCUCR |= 1<<PUD;	// disable pull-up
- 	DDRB |= 1<<PB3 | 1<<PB4;	// outputs
-	PORTB |= 1<<PB3;			// Enable LED
- 	PORTB &= ~(1<<PB4);			// reset LED_CMD
+ 	DDRB |= LED_POWER | LED_CMD;	// outputs
+	PORTB |= LED_POWER;			// Enable LED
+ 	PORTB &= ~(LED_CMD);			// reset LED_CMD
 	
 	sei();				// enable interrupts
 	
@@ -192,15 +189,17 @@ int main(void)
 	
     while (1)
     {
-		/* generates random numbers outside of the main loop,
-		   allowing the non-predictability of the numbers generated inside the main part
-		   since its duration depends on the acceleration which depend on external events */
+		/* generates random numbers outside of the main loop, allowing the non-predictability of the 
+		   numbers generated when needed. It is possible because the duration of the main loop varies 
+		   depending on the acceleration which depend on external events */
 		rando.run();
 		
 		if(!g_eco && !g_sleepCoolDown){
 			/*********************************************************/
 			/* Run main loop every time accelerometer data are ready */
 			/*********************************************************/
+			/* The accelerometer's clock is precise enough to rely on it and save power and execution 
+			   cycles by not using an internal timer. */
 			if(g_dataReady){					// Synchronized to accelerometer data-rate (cf. MMA_CTRL_REG1_STB)
 				/* count timeBase */
  				g_cycleCounter++;
@@ -219,7 +218,7 @@ int main(void)
 				lowPass2X.run(accX);
 				lowPass2Y.run(accY);
 				
-				/* compute activation/Sleep threshold and global brightness */
+				/* Test activation/Sleep threshold and compute global brightness */
 				sumAxes = filteredX + filteredY + filteredZ;
 				if(sumAxes > ACTIVATION_THRESHOLD){
 					if(!g_cycleCounter && brightness < BRIGHTNESS_DEFAULT) brightness ++;
@@ -248,39 +247,49 @@ int main(void)
 					/* Compute Starlight animation */
 					static uint8_t animCounterStarlight = 0;
 					animCounterStarlight++;
- 					if(animCounterStarlight == ANIM_STARLIGHT_LEN){
+ 					if(animCounterStarlight == ANIM_STARLIGHT_LEN){	// Test for starlight animation's trigger
  						animCounterStarlight = 0;
- 						indexLed = rando.run();
+ 						starlightLedIndex = rando.run();
  						/* Faster and more precise than a division */
  						/* Maps 18 LEDs to a random range(0;255) */
- 						if     (indexLed <  15)	indexLed= 0;
- 						else if(indexLed <  29)	indexLed= 1;
- 						else if(indexLed <  43)	indexLed= 2;
- 						else if(indexLed <  57)	indexLed= 3;
- 						else if(indexLed <  71)	indexLed= 4;
- 						else if(indexLed <  86)	indexLed= 5;
- 						else if(indexLed < 100)	indexLed= 6;
- 						else if(indexLed < 114)	indexLed= 7;
- 						else if(indexLed < 128)	indexLed= 8;
- 						else if(indexLed < 142)	indexLed= 9;
- 						else if(indexLed < 156)	indexLed=10;
- 						else if(indexLed < 171)	indexLed=11;
- 						else if(indexLed < 185)	indexLed=12;
- 						else if(indexLed < 199)	indexLed=13;
- 						else if(indexLed < 213)	indexLed=14;
- 						else if(indexLed < 227)	indexLed=15;
- 						else if(indexLed < 241)	indexLed=16;
- 						else					indexLed=17;
- 						stripBright[indexLed] = (uint16_t)(BRIGHTNESS_STARLIGHT * brightness) >> 7;
+ 						if     (starlightLedIndex <  15)	starlightLedIndex= 0;
+ 						else if(starlightLedIndex <  29)	starlightLedIndex= 1;
+ 						else if(starlightLedIndex <  43)	starlightLedIndex= 2;
+ 						else if(starlightLedIndex <  57)	starlightLedIndex= 3;
+ 						else if(starlightLedIndex <  71)	starlightLedIndex= 4;
+ 						else if(starlightLedIndex <  86)	starlightLedIndex= 5;
+ 						else if(starlightLedIndex < 100)	starlightLedIndex= 6;
+ 						else if(starlightLedIndex < 114)	starlightLedIndex= 7;
+ 						else if(starlightLedIndex < 128)	starlightLedIndex= 8;
+ 						else if(starlightLedIndex < 142)	starlightLedIndex= 9;
+ 						else if(starlightLedIndex < 156)	starlightLedIndex=10;
+ 						else if(starlightLedIndex < 171)	starlightLedIndex=11;
+ 						else if(starlightLedIndex < 185)	starlightLedIndex=12;
+ 						else if(starlightLedIndex < 199)	starlightLedIndex=13;
+ 						else if(starlightLedIndex < 213)	starlightLedIndex=14;
+ 						else if(starlightLedIndex < 227)	starlightLedIndex=15;
+ 						else if(starlightLedIndex < 241)	starlightLedIndex=16;
+ 						else								starlightLedIndex=17;
+						/* scale BRIGHTNESS_STARLIGHT to global brightness */
+ 						stripBright[starlightLedIndex] = (uint16_t)(BRIGHTNESS_STARLIGHT * brightness) >> 7;	// The bitshift works only if BRIGHTNESS_DEFAULT is a power of 2
+						/* What follows is a small trick to reduce ram usage by using a small table 
+						   "starlightHue[]" to store the hue of any active starlight. Since their number 
+						   will never exceed STARLIGHT_LED_COUNT, there is no need to store the hue 
+						   of each LED in the string. The Starlight effect being the one with the 
+						   highest priority, we can use the table "stripAnim" to store the index to 
+						   "starlightHue" containing the hue for this LED. */
  						starlightHue[startlightHueIndex] = hue;
-						stripAnim[indexLed] = (tAnim)((uint8_t)AnimStarlight + startlightHueIndex);
-						
+						stripAnim[starlightLedIndex] = (tAnim)((uint8_t)AnimStarlight + startlightHueIndex);
 						startlightHueIndex++;
 						if(startlightHueIndex == STARLIGHT_LED_COUNT) startlightHueIndex = 0;
  					}
 #endif
 #if defined(ANIM_WINGS)
-					wingBright = (brightness >> 3) + abs(posYHiPass) + abs(posYHiPass);
+					if(brightness > 0){ // test to avoid having wingBright > 0 while brightness is 0 and sleepMode is being engaged
+						wingBright = (brightness >> 3) + abs(posYHiPass) + abs(posYHiPass);
+					}else{
+						wingBright = 0;
+					}
 #endif
 #if defined(ANIM_BALLTILT) || defined(ANIM_STATIC_FRENCHFLAG)
 					if(posXHiPass >  HALF_G) posXHiPass =  HALF_G;	// Set limits for X,Y accel position
@@ -309,7 +318,10 @@ int main(void)
 					hueWing = hue + hueXShift - hueYShift + 32768;
 					computeAnimations(RIGHT_TOP_START_INDEX, STRIP_LEN);
 					
-				//============================	/* Send pixels */
+				//============================	/* Send pixels OR Wait to sleep */
+					/* Data are sent to pixels only if each one is OFF. g_LedsOn allows to send 0 to 
+					   all pixels and effectively turning them OFF before the next cycle where nothing 
+					   will be sent. */
 					if(brightness == 0 && !g_LedsOn){
 						g_sleepEngage ++;
 					}else{
@@ -321,13 +333,20 @@ int main(void)
 							neoPixelSendPixel(stripRed__[i]);	// Red
 							neoPixelSendPixel(stripBlue_[i]);	// Blue
 						}
-						if(brightness == 0) g_LedsOn = false;
+						if(brightness == 0){
+							g_LedsOn = false;
+						}
 					}
-				}
-			}
-		}
+				} // End of subsets
+			} // if(g_dataReady)
+		} // if(!g_eco && !g_sleepCoolDown)
+		
+		/********************/
 		/* Sleep management */
+		/********************/
 		if(g_sleepEngage == 255 || g_eco || g_firstBoot){
+			/* Sleep mode is forced on the first boot to avoid an unsolved glitch with the LEDs that 
+			   happens only before everything has been put to sleep for the first time. */
 			g_firstBoot = false;
 			if(!g_eco){
 				g_eco = true;
@@ -335,34 +354,39 @@ int main(void)
  				accel::enableAutoSleep();
 				g_sleepEngage = 0;
 				DDRB = 0;								// set PORTB to Hi-Z
-				PORTB &= ~(1<<PB3 | 1<<PB4);
+				PORTB &= ~(LED_POWER | LED_CMD);
 			}
 			WDTCR = 1<<WDIE | 1<<WDCE | 1<<WDE | 3;	// enable watchdog  timer and interrupt for .125sec
 			set_sleep_mode(SLEEP_MODE_PWR_DOWN);	// SLEEP_MODE_PWR_DOWN
 	 		sleep_mode();							// sleep enable
 		/* Wake-up */
 		}
+		
+		/************************/
 		/* Interrupt management */
+		/************************/
 		if(!(PINB & 1<<PB1)){
 			/* Check int sources from Accelerometer */
 			if(accel::checkIntSource(&g_accelIntSource) == I2cOk){
 				if(g_accelIntSource & accel::IntTRANS){		// Transient event
 					accel::readIntTransient();				// Unlatch TRANS int event
 					if(g_eco && !g_sleepCoolDown){			// Conditions for exiting sleep mode
-						DDRB |= (1<<PB3 | 1<<PB4);	// Outputs
-						PORTB |= 1<<PB3;			// Enable LEDs
+						DDRB |= (LED_POWER | LED_CMD);	// Outputs
+						PORTB |= LED_POWER;			// Enable LEDs
 						g_eco = false;
 						accel::disableAutoSleep();
-					}else{									// eliminate Trans_INT that happens when accelerometer goes to sleep
+					}else{									// eliminates Trans_INT that happens when accelerometer goes to sleep
 						g_sleepCoolDown = false;
 					}
 				}
 				if(g_accelIntSource & accel::IntDRDY){
+					/* Interrupt event will be unlatched at the begining of the next cycle when the 
+					   accelerometer data will be read. */
 					g_dataReady = true;
 				}
 			}
-		}
-    }
+		} // End of int management
+    } // End of global loop
 }
 /*******************************************************************************
 *                                 FUNCTIONS                                    *
@@ -377,23 +401,23 @@ void computeAnimations(uint8_t startIndex, uint8_t endIndex)
 
 	for(; i<endIndex; i++){
 		if(stripAnim[i] < AnimStarlight){
-			stripAnim[i] = AnimNone;
+			stripAnim[i] = AnimNone;		// reset animation priority of the current LED
 		}
 #ifdef ANIM_BALLTILT
 		// Ball-Tilt animation
 //#if defined(BALL_TILT_HIPASS)
- 		x = abs(posXHiPass - (int8_t)pgm_read_byte(&ledXPos[i]));	// Relative position of LED to acceleration
- 		y = abs(posYHiPass - (int8_t)pgm_read_byte(&ledYPos[i]));
+ 		xBall = abs(posXHiPass - (int8_t)pgm_read_byte(&ledXPos[i]));	// Relative position of LED-to-acceleration
+ 		yBall = abs(posYHiPass - (int8_t)pgm_read_byte(&ledYPos[i]));
 //#else
-//		x = abs(posXSmooth - (int8_t)pgm_read_byte(&ledXPos[i]));	// Relative position of LED to acceleration
-//		y = abs(posYSmooth - (int8_t)pgm_read_byte(&ledYPos[i]));
+//		xBall = abs(posXSmooth - (int8_t)pgm_read_byte(&ledXPos[i]));	// Relative position of LED-to-acceleration
+//		yBall = abs(posYSmooth - (int8_t)pgm_read_byte(&ledYPos[i]));
 //#endif // BALL_TILT_HIPASS
-		distComp.value = ((x*x)+(y*y))<<1;	// Pythagorean formula (+ left shift for more precision)
-		if(distComp.split.MSB < PROXI_LIGHT_LEN){
-			uint8_t bright = pgm_read_byte(&proxiLight[distComp.split.MSB]);				// indexing to "proxiLight" is more precise (there is more values) thanks to the left-shift
-			bright = ((uint16_t)(bright*brightness))>>7;					// Scale LED brightness to global brightness
-			if(bright > stripBright[i] || stripAnim[i] <= AnimBallTilt){	// Handles superposition of animations
-				stripAnim[i] = AnimBallTilt;
+		distComp.value = ((xBall*xBall)+(yBall*yBall))<<1;						// Pythagorean formula (+ left shift for more precision)
+		if(distComp.split.MSB < PROXI_LIGHT_LEN){								// Find relative brightness in proximity LUT
+			uint8_t bright = pgm_read_byte(&proxiLight[distComp.split.MSB]);	// indexing to "proxiLight" is more precise (there is more values) thanks to the left-shift
+			bright = ((uint16_t)(bright*brightness))>>7;						// Scale LED brightness to global brightness
+			if(bright > stripBright[i] || stripAnim[i] <= AnimBallTilt){		// Handles superposition of animations
+				stripAnim[i] = AnimBallTilt;									// Set animation priority to the current LED
 				colorHSV(hueBall, SATURATION_DEFAULT, bright, &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
 				stripBright[i] = bright;
 			}
@@ -401,7 +425,7 @@ void computeAnimations(uint8_t startIndex, uint8_t endIndex)
 #endif // ANIM_BALLTILT
 		// Wings animation
 #ifdef ANIM_STATIC_FRENCHFLAG
-		// Display french flag
+		// Display French flag
 		if(stripAnim[i] <= AnimStatic){
 			stripAnim[i] = AnimStatic;
 			int8_t tmpLedX = (int8_t)pgm_read_byte(&ledXPos[i]);
@@ -416,11 +440,13 @@ void computeAnimations(uint8_t startIndex, uint8_t endIndex)
 #endif // ANIM_STATIC_FRENCHFLAG
 #if defined(ANIM_WINGS)
 		// Display colored wing
-		if(stripAnim[i] <= AnimWings){
-			stripAnim[i] = AnimWings;
-			stripRed__[i] = wingRed;
+		if(stripAnim[i] <= AnimWings){			// Handles superposition of animations.
+			stripAnim[i] = AnimWings;			// Set animation priority to the current LED.
+			stripRed__[i] = wingRed;			// Set colors to current pixel using precomputed values for this set of LEDs.
 			stripGreen[i] = wingGreen;
 			stripBlue_[i] = wingBlue;
+			/* While stripBright[] is not used for this animation, it is required by the starlight 
+			   animation to be able to give its priority when the LED fades below this LED's brightness. */
 			stripBright[i] = wingBright;
 		}
 #endif // ANIM_WINGS
@@ -431,13 +457,13 @@ void computeAnimations(uint8_t startIndex, uint8_t endIndex)
 			stripBlue_[i] = 0;
 		// Render Starlight LEDs
 		}else if(stripAnim[i] >= AnimStarlight){
-			uint8_t starIndex = stripAnim[i] - AnimStarlight;
+			uint8_t starIndex = stripAnim[i] - AnimStarlight;		// Recover the index to starlightHue[] for this LED.
 			colorHSV(starlightHue[starIndex], SATURATION_SATRLIGHT, stripBright[i], &stripRed__[i], &stripGreen[i], &stripBlue_[i]);
 			if(stripBright[i] > LED_FADE_SPEED){
 				stripBright[i]-=LED_FADE_SPEED;
 			}else{
 				stripBright[i]=0;
-				stripAnim[i] = AnimNone;
+				stripAnim[i] = AnimNone;	// Resets this LED's priority.
 			}
 		}
 	}
@@ -522,10 +548,10 @@ void neoPixelSendPixel(uint8_t b)
 {
 	cli();
 	
-	DDRB |= 1<<PB4;
+	DDRB |= LED_CMD;
 	volatile uint8_t n1, n2 = 0;  // First, next bits out
-	uint8_t hi = PORTB |  (1<<PB4);
-	uint8_t lo = PORTB & ~(1<<PB4);
+	uint8_t hi = PORTB |  (LED_CMD);
+	uint8_t lo = PORTB & ~(LED_CMD);
 	n1 = lo;
 	if(b & 0x80) n1 = hi;
 
