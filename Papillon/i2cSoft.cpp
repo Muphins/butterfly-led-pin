@@ -123,13 +123,16 @@ tI2cStatus SoftI2CReadByte(uint8_t *data, bool ack)
 	{
 		SOFT_I2C_SDA_HIGH;
 	}
-	H_DEL;
+	Q_DEL;
 	
 	SOFT_I2C_SCL_HIGH;
 	H_DEL;
 	
 	SOFT_I2C_SCL_LOW;
-	H_DEL;
+	Q_DEL;
+	
+	SOFT_I2C_SDA_HIGH;
+	Q_DEL;
 	
 //	m_i2cStatus = I2cReadOk;
 	return I2cOk;
